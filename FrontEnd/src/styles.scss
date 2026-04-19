@@ -1,0 +1,111 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;500;700&display=swap');
+
+:root,
+[data-theme='dark'] {
+  --c-ocean:        #0a4d8c;
+  --c-ocean-deep:   #052a4e;
+  --c-ocean-surf:   #00a6ff;
+  --c-life-green:   #00d66b;
+  --c-safety-yellow:#ffc233;
+  --c-strategic-red:#ff3b3b;
+  --c-accent:       #00d4ff;
+
+  --c-bg:           #060d14;
+  --c-surface:      #0d1721;
+  --c-surface-2:    #142232;
+  --c-border:       #1a2e45;
+  --c-text:         #e0ecf4;
+  --c-text-dim:     #6e8699;
+  --c-text-hard:    #ffffff;
+
+  --shadow-glow:    0 0 14px rgba(0, 212, 255, 0.35);
+  --shadow-panel:   0 4px 18px rgba(0, 0, 0, 0.45);
+
+  --map-filter:     brightness(0.85) saturate(0.75);
+}
+
+[data-theme='light'] {
+  --c-ocean:        #0a4d8c;
+  --c-ocean-deep:   #062a4e;
+  --c-ocean-surf:   #0072c6;
+  --c-life-green:   #0a9d57;
+  --c-safety-yellow:#d68a00;
+  --c-strategic-red:#d8342a;
+  --c-accent:       #0072c6;
+
+  --c-bg:           #f2f5f8;
+  --c-surface:      #ffffff;
+  --c-surface-2:    #eef2f6;
+  --c-border:       #c7d2de;
+  --c-text:         #0c1a26;
+  --c-text-dim:     #5a6b7a;
+  --c-text-hard:    #000000;
+
+  --shadow-glow:    0 0 10px rgba(0, 114, 198, 0.25);
+  --shadow-panel:   0 2px 10px rgba(10, 77, 140, 0.12);
+
+  --map-filter:     none;
+}
+
+:root {
+  --f-mono: 'Share Tech Mono', 'Consolas', monospace;
+  --f-ui:   'Barlow Condensed', system-ui, sans-serif;
+
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  --t-fast: 160ms cubic-bezier(.25,.8,.25,1);
+  --t-med:  360ms cubic-bezier(.25,.8,.25,1);
+  --t-slow: 600ms cubic-bezier(.25,.8,.25,1);
+
+  --z-map:     100;
+  --z-panel:   400;
+  --z-overlay: 800;
+  --z-alert:   1200;
+  --z-modal:   1600;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--f-ui);
+  font-weight: 300;
+  letter-spacing: 0.3px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.mono      { font-family: var(--f-mono); }
+.t-ok      { color: var(--c-life-green); }
+.t-warn    { color: var(--c-safety-yellow); }
+.t-critical{ color: var(--c-strategic-red); }
+.t-info    { color: var(--c-accent); }
+.t-dim     { color: var(--c-text-dim); }
+
+/* Leaflet override para aplicar filtro de tema no tile */
+.leaflet-tile-pane { filter: var(--map-filter); }
+.leaflet-container { background: var(--c-bg); }

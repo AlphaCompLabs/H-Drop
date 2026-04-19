@@ -1,0 +1,10 @@
+node_modules/
+dist/
+out-tsc/
+.angular/
+.env.local
+.vscode/*
+!.vscode/extensions.json
+*.log
+Thumbs.db
+.DS_Store

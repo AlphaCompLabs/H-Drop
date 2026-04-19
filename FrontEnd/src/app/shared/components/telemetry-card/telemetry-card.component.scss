@@ -1,0 +1,41 @@
+:host { display: contents; }
+
+.card {
+  background: color-mix(in srgb, var(--c-accent) 4%, transparent);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  transition: border-color var(--t-fast), background var(--t-fast);
+
+  &.destaque {
+    border-color: var(--c-accent);
+    background: color-mix(in srgb, var(--c-accent) 7%, transparent);
+  }
+
+  &.ok       { border-color: color-mix(in srgb, var(--c-life-green) 60%, transparent); }
+  &.warning  { border-color: color-mix(in srgb, var(--c-safety-yellow) 60%, transparent); }
+  &.critical { border-color: color-mix(in srgb, var(--c-strategic-red) 60%, transparent); }
+  &.info     { border-color: color-mix(in srgb, var(--c-accent) 60%, transparent); }
+}
+
+.label {
+  font-size: 0.6rem;
+  color: var(--c-text-dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.valor {
+  font-size: 1.25rem;
+  color: var(--c-text);
+  word-break: break-all;
+}
+
+.card.destaque .valor { font-size: 1.8rem; color: var(--c-accent); }
+.card.ok       .valor { color: var(--c-life-green); }
+.card.warning  .valor { color: var(--c-safety-yellow); }
+.card.critical .valor { color: var(--c-strategic-red); }
+.card.info     .valor { color: var(--c-accent); }
+
+.unidade { font-size: 0.7rem; color: var(--c-text-dim); margin-left: 4px; }

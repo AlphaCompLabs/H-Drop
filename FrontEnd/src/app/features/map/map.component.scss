@@ -1,0 +1,99 @@
+:host {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+}
+
+.mapa {
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.overlay {
+  position: absolute;
+  top: 12px; left: 56px;
+  z-index: var(--z-overlay);
+  background: color-mix(in srgb, var(--c-surface) 90%, transparent);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: 0.65rem;
+  color: var(--c-text-dim);
+  pointer-events: none;
+  line-height: 1.7;
+  span { color: var(--c-accent); }
+}
+
+.dist {
+  position: absolute;
+  bottom: 28px; left: 12px;
+  z-index: var(--z-overlay);
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-safety-yellow) 40%, transparent);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  color: var(--c-safety-yellow);
+  span { color: var(--c-text); margin-left: 6px; }
+}
+
+.camadas {
+  position: absolute;
+  top: 12px; right: 12px;
+  z-index: var(--z-overlay);
+  display: flex; gap: 2px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 2px;
+}
+
+.btn-cam {
+  padding: 4px 9px;
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  color: var(--c-text-dim);
+  border-radius: var(--r-sm);
+  transition: all var(--t-fast);
+  &:hover { color: var(--c-text); }
+  &.ativo { background: var(--c-accent); color: var(--c-bg); }
+}
+
+::ng-deep .boat-icon {
+  width: 22px; height: 22px;
+  background: var(--c-accent);
+  clip-path: polygon(50% 0%, 100% 100%, 50% 75%, 0% 100%);
+  filter: drop-shadow(0 0 6px var(--c-accent));
+  transition: transform var(--t-med);
+}
+
+::ng-deep .dest-icon {
+  width: 22px; height: 22px;
+  border: 2px solid var(--c-safety-yellow);
+  border-radius: 50%;
+  position: relative;
+  animation: dest-pulse 1.8s ease-in-out infinite;
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    background: var(--c-safety-yellow);
+    box-shadow: 0 0 8px var(--c-safety-yellow);
+  }
+}
+
+@keyframes dest-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-safety-yellow) 50%, transparent); }
+  50%      { box-shadow: 0 0 0 8px color-mix(in srgb, var(--c-safety-yellow) 0%, transparent); }
+}
+
+@media (max-width: 640px) {
+  .overlay { font-size: 0.55rem; padding: 4px 8px; left: 50px; }
+  .camadas { top: 8px; right: 8px; }
+  .btn-cam { padding: 3px 6px; font-size: 0.58rem; }
+  .dist    { bottom: 14px; font-size: 0.7rem; }
+}

@@ -1,0 +1,45 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+  overflow-y: auto;
+  height: 100%;
+}
+
+.bloco {
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.titulo {
+  font-size: 0.65rem;
+  letter-spacing: 3px;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+  margin-bottom: var(--sp-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+
+  hd-telemetry-card:first-child { grid-column: 1 / -1; }
+}
+
+.destino {
+  background: color-mix(in srgb, var(--c-safety-yellow) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-safety-yellow) 25%, transparent);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3);
+  font-size: 0.75rem;
+  color: var(--c-safety-yellow);
+  line-height: 1.8;
+
+  &.ativo {
+    border-color: color-mix(in srgb, var(--c-life-green) 30%, transparent);
+    color: var(--c-life-green);
+    background: color-mix(in srgb, var(--c-life-green) 5%, transparent);
+  }
+}

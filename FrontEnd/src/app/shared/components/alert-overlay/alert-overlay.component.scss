@@ -1,0 +1,73 @@
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: var(--z-modal);
+  padding: var(--sp-4);
+}
+
+.caixa {
+  background: var(--c-surface);
+  border: 2px solid var(--c-strategic-red);
+  border-radius: var(--r-md);
+  max-width: 420px; width: 100%;
+  padding: var(--sp-5);
+  box-shadow: 0 0 0 4px rgba(255, 59, 59, 0.15), var(--shadow-panel);
+  animation: pop 280ms cubic-bezier(.18,.88,.32,1.28);
+}
+
+@keyframes pop { from { transform: scale(.85); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+
+.cabecalho { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.sev {
+  font-size: 0.7rem; letter-spacing: 3px;
+  padding: 4px 10px; border-radius: var(--r-sm);
+  background: var(--c-strategic-red); color: var(--c-text-hard);
+}
+.titulo { font-size: 1.1rem; font-weight: 500; color: var(--c-text); }
+.msg { color: var(--c-text-dim); margin-bottom: var(--sp-4); line-height: 1.5; }
+
+.btn {
+  width: 100%;
+  padding: var(--sp-3);
+  background: var(--c-strategic-red); color: var(--c-text-hard);
+  font-weight: 700; letter-spacing: 3px;
+  border-radius: var(--r-sm);
+  transition: filter var(--t-fast);
+  &:hover { filter: brightness(1.15); }
+}
+
+.toast-stack {
+  position: fixed;
+  top: 80px; right: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  z-index: var(--z-alert);
+  max-width: 360px;
+}
+
+.toast {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--c-surface);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-panel);
+  animation: slide 260ms ease-out;
+
+  &.ok       { border-left-color: var(--c-life-green); }
+  &.info     { border-left-color: var(--c-accent); }
+  &.warning  { border-left-color: var(--c-safety-yellow); }
+  &.critical { border-left-color: var(--c-strategic-red); }
+
+  .sev { background: transparent; color: var(--c-text-dim); padding: 0; letter-spacing: 2px; font-size: 0.6rem; }
+  .corpo { flex: 1; }
+  .titulo { font-weight: 500; font-size: 0.95rem; }
+  .msg { color: var(--c-text-dim); font-size: 0.82rem; margin: 0; }
+  .fechar { color: var(--c-text-dim); font-size: 1.2rem; line-height: 1; padding: 0 6px; }
+}
+
+@keyframes slide { from { transform: translateX(100%); opacity: 0 } to { transform: none; opacity: 1 } }
+
+@media (max-width: 640px) {
+  .toast-stack { left: var(--sp-2); right: var(--sp-2); max-width: none; top: 70px; }
+}
