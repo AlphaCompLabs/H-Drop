@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA, ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ComandoRapido } from '../../core/models/comando.model';
 import { AlertsService } from '../../core/services/alerts.service';
 import { ComandoService } from '../../core/services/comando.service';
@@ -14,21 +14,26 @@ interface LogSync {
   selector: 'hd-sync-test',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   template: `
     <div class="cabecalho mono">// teste de sincronização e2e</div>
 
     <div class="botoes">
       <button class="btn start" (click)="enviar('START')">
-        <span class="mono">▶ START</span><small>Iniciar missão</small>
+        <iconify-icon icon="ph:play-fill" aria-hidden="true"></iconify-icon>
+        <span class="mono">START</span><small>Iniciar missão</small>
       </button>
       <button class="btn ack" (click)="enviar('ACK_ARRIVAL')">
-        <span class="mono">✓ ACK</span><small>Confirmar chegada</small>
+        <iconify-icon icon="ph:check-circle-bold" aria-hidden="true"></iconify-icon>
+        <span class="mono">ACK</span><small>Confirmar chegada</small>
       </button>
       <button class="btn home" (click)="enviar('GO_HOME')">
-        <span class="mono">⌂ HOME</span><small>Retornar à base</small>
+        <iconify-icon icon="ph:house-bold" aria-hidden="true"></iconify-icon>
+        <span class="mono">HOME</span><small>Retornar à base</small>
       </button>
       <button class="btn stop" (click)="enviar('STOP')">
-        <span class="mono">⏹ STOP</span><small>Parada de emergência</small>
+        <iconify-icon icon="ph:stop-circle-bold" aria-hidden="true"></iconify-icon>
+        <span class="mono">STOP</span><small>Parada de emergência</small>
       </button>
     </div>
 

@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  CUSTOM_ELEMENTS_SCHEMA,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
@@ -42,26 +43,32 @@ const CAMADAS: Record<CamadaTipo, { url: string; attribution: string; maxZoom: n
   selector: 'hd-map',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   template: `
     <div #mapa class="mapa"></div>
 
     <div class="overlay mono">
-      MODO: <span>TELECOMANDO</span><br>
-      RX: <span>ws /telemetria</span><br>
-      TX: <span>POST /comando</span>
+      <div><iconify-icon icon="ph:target-bold"></iconify-icon> MODO: <span>TELECOMANDO</span></div>
+      <div><iconify-icon icon="ph:arrow-down-bold"></iconify-icon> RX: <span>ws /telemetria</span></div>
+      <div><iconify-icon icon="ph:arrow-up-bold"></iconify-icon> TX: <span>POST /comando</span></div>
     </div>
 
     @if (distanciaTexto()) {
-      <div class="dist mono">DISTÂNCIA AO DESTINO: <span>{{ distanciaTexto() }}</span></div>
+      <div class="dist mono">
+        <iconify-icon icon="ph:flag-pennant-fill"></iconify-icon>
+        DISTÂNCIA AO DESTINO: <span>{{ distanciaTexto() }}</span>
+      </div>
     }
 
-    <div class="camadas">
+    <div class="camadas" role="group" aria-label="Camadas do mapa">
+      <div class="cam-titulo mono"><iconify-icon icon="ph:stack-bold"></iconify-icon> CAMADAS</div>
       @for (c of tiposCamada; track c) {
         <button
           type="button"
           class="btn-cam mono"
           [class.ativo]="camadaAtiva() === c"
           (click)="trocarCamada(c)">
+          <iconify-icon [attr.icon]="iconeCamada(c)"></iconify-icon>
           {{ c.toUpperCase() }}
         </button>
       }
@@ -101,7 +108,7 @@ export class MapComponent implements AfterViewInit {
     effect(() => {
       const p = this.proa();
       if (!this.marcadorBarco) return;
-      const el = this.marcadorBarco.getElement()?.querySelector<HTMLElement>('.boat-icon');
+      const el = this.marcadorBarco.getElement()?.querySelector<HTMLElement>('.boat-rot');
       if (el) el.style.transform = `rotate(${p}deg)`;
     });
   }
@@ -140,10 +147,13 @@ export class MapComponent implements AfterViewInit {
     if (!this.marcadorBarco) {
       this.marcadorBarco = L.marker(this.posicaoAtual, {
         icon: L.divIcon({
-          className: '',
-          html: `<div class="boat-icon" style="transform: rotate(${this.proa()}deg)"></div>`,
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
+          className: 'marker-barco',
+          html: `
+            <div class="boat-rot" style="transform: rotate(${this.proa()}deg)">
+              <iconify-icon icon="ph:navigation-arrow-fill"></iconify-icon>
+            </div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         }),
       }).addTo(this.mapa);
     } else {
@@ -162,10 +172,10 @@ export class MapComponent implements AfterViewInit {
     if (!this.marcadorDestino) {
       this.marcadorDestino = L.marker(this.posicaoDestino, {
         icon: L.divIcon({
-          className: '',
-          html: '<div class="dest-icon"></div>',
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
+          className: 'marker-destino',
+          html: '<iconify-icon icon="ph:map-pin-fill"></iconify-icon>',
+          iconSize: [30, 30],
+          iconAnchor: [15, 28],
         }),
       }).addTo(this.mapa);
     } else {
@@ -201,6 +211,14 @@ export class MapComponent implements AfterViewInit {
   trocarCamada(tipo: CamadaTipo): void {
     this.camadaAtiva.set(tipo);
     this.aplicarCamada(tipo);
+  }
+
+  iconeCamada(tipo: CamadaTipo): string {
+    return {
+      dark: 'ph:moon-bold',
+      street: 'ph:path-bold',
+      satellite: 'ph:globe-bold',
+    }[tipo];
   }
 
   private aplicarCamada(tipo: CamadaTipo): void {

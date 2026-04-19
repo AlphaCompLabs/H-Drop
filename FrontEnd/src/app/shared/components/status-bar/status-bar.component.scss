@@ -21,20 +21,20 @@
   background: var(--c-surface-2);
   transition: all var(--t-fast);
 
-  .dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--c-text-dim);
-    box-shadow: 0 0 0 rgba(0,0,0,0);
+  iconify-icon {
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    filter: drop-shadow(0 0 0 transparent);
   }
 }
 
 .item.ok   { color: var(--c-life-green);    border-color: color-mix(in srgb, var(--c-life-green) 50%, transparent); }
-.item.ok .dot   { background: var(--c-life-green);    box-shadow: 0 0 8px var(--c-life-green); }
+.item.ok iconify-icon   { filter: drop-shadow(0 0 4px var(--c-life-green)); }
 .item.warn { color: var(--c-safety-yellow); border-color: color-mix(in srgb, var(--c-safety-yellow) 50%, transparent); }
-.item.warn .dot { background: var(--c-safety-yellow); box-shadow: 0 0 8px var(--c-safety-yellow); animation: pulse 1.4s ease-in-out infinite; }
+.item.warn iconify-icon { filter: drop-shadow(0 0 4px var(--c-safety-yellow)); animation: pulse 1.4s ease-in-out infinite; }
 .item.crit { color: var(--c-strategic-red); border-color: color-mix(in srgb, var(--c-strategic-red) 50%, transparent); }
-.item.crit .dot { background: var(--c-strategic-red); box-shadow: 0 0 10px var(--c-strategic-red); animation: pulse 1s ease-in-out infinite; }
-.item.dim .dot  { background: var(--c-text-dim); }
+.item.crit iconify-icon { filter: drop-shadow(0 0 5px var(--c-strategic-red)); animation: pulse 1s ease-in-out infinite; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }

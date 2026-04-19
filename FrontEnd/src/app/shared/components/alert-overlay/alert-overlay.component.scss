@@ -14,6 +14,14 @@
   padding: var(--sp-5);
   box-shadow: 0 0 0 4px rgba(255, 59, 59, 0.15), var(--shadow-panel);
   animation: pop 280ms cubic-bezier(.18,.88,.32,1.28);
+
+  .sev-ico {
+    display: block;
+    font-size: 44px;
+    color: var(--c-strategic-red);
+    margin: 0 auto var(--sp-3);
+    filter: drop-shadow(0 0 8px var(--c-strategic-red));
+  }
 }
 
 @keyframes pop { from { transform: scale(.85); opacity: 0 } to { transform: scale(1); opacity: 1 } }
@@ -30,10 +38,15 @@
 .btn {
   width: 100%;
   padding: var(--sp-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
   background: var(--c-strategic-red); color: var(--c-text-hard);
   font-weight: 700; letter-spacing: 3px;
   border-radius: var(--r-sm);
   transition: filter var(--t-fast);
+  iconify-icon { font-size: 18px; }
   &:hover { filter: brightness(1.15); }
 }
 
@@ -46,7 +59,7 @@
 }
 
 .toast {
-  display: flex; align-items: flex-start; gap: var(--sp-2);
+  display: flex; align-items: flex-start; gap: var(--sp-3);
   padding: var(--sp-3);
   background: var(--c-surface);
   border-left: 3px solid var(--c-border);
@@ -54,16 +67,21 @@
   box-shadow: var(--shadow-panel);
   animation: slide 260ms ease-out;
 
-  &.ok       { border-left-color: var(--c-life-green); }
-  &.info     { border-left-color: var(--c-accent); }
-  &.warning  { border-left-color: var(--c-safety-yellow); }
-  &.critical { border-left-color: var(--c-strategic-red); }
+  .sev-ico   { font-size: 22px; flex-shrink: 0; }
+  &.ok       { border-left-color: var(--c-life-green);    .sev-ico { color: var(--c-life-green); } }
+  &.info     { border-left-color: var(--c-accent);        .sev-ico { color: var(--c-accent); } }
+  &.warning  { border-left-color: var(--c-safety-yellow); .sev-ico { color: var(--c-safety-yellow); } }
+  &.critical { border-left-color: var(--c-strategic-red); .sev-ico { color: var(--c-strategic-red); } }
 
-  .sev { background: transparent; color: var(--c-text-dim); padding: 0; letter-spacing: 2px; font-size: 0.6rem; }
-  .corpo { flex: 1; }
+  .corpo { flex: 1; min-width: 0; }
   .titulo { font-weight: 500; font-size: 0.95rem; }
   .msg { color: var(--c-text-dim); font-size: 0.82rem; margin: 0; }
-  .fechar { color: var(--c-text-dim); font-size: 1.2rem; line-height: 1; padding: 0 6px; }
+  .fechar {
+    color: var(--c-text-dim);
+    padding: 0 4px;
+    iconify-icon { font-size: 16px; }
+    &:hover { color: var(--c-text); }
+  }
 }
 
 @keyframes slide { from { transform: translateX(100%); opacity: 0 } to { transform: none; opacity: 1 } }

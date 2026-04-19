@@ -14,44 +14,32 @@
   border-bottom: 1px solid var(--c-border);
 }
 
-.logo { display: flex; align-items: center; gap: var(--sp-3); }
-
-.logo-icon {
-  width: 34px; height: 34px;
-  border: 2px solid var(--c-accent);
-  border-radius: 50%;
-  position: relative;
-
-  &::before {
-    content: ''; position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(circle, var(--c-accent) 28%, transparent 40%);
-    border-radius: 50%;
-  }
-  &::after {
-    content: ''; position: absolute; inset: -2px;
-    border: 1px solid var(--c-accent); border-radius: 50%;
-    animation: sonar 2.2s ease-out infinite;
-  }
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  text-decoration: none;
+  color: inherit;
 }
 
-@keyframes sonar {
-  0%   { transform: scale(1);   opacity: 0.8; }
-  100% { transform: scale(2.1); opacity: 0; }
+.logo-img {
+  height: 40px;
+  width: auto;
+  display: block;
 }
 
-.logo-text h1 {
-  font-weight: 700;
-  font-size: 1.35rem;
-  letter-spacing: 6px;
-  color: var(--c-accent);
-  text-transform: uppercase;
-}
+/* Por padrão exibe a variante do tema ativo e esconde a outra. */
+:host-context([data-theme='dark'])  .logo-img.light,
+:host-context(body[data-theme='dark'])  .logo-img.light { display: none; }
+:host-context([data-theme='light']) .logo-img.dark,
+:host-context(body[data-theme='light']) .logo-img.dark  { display: none; }
 
-.logo-text span {
+.subtitulo {
   font-size: 0.65rem;
   color: var(--c-text-dim);
   letter-spacing: 3px;
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--c-border);
 }
 
 .acoes { display: flex; align-items: center; gap: var(--sp-3); }
@@ -123,7 +111,7 @@
   :host .principal[data-aba='telemetria'] .painel-esq  { display: flex; flex-direction: column; }
   :host .principal[data-aba='sync']       .painel-dir  { display: block; }
 
-  .logo-text span { display: none; }
-  .logo-text h1   { font-size: 1.15rem; letter-spacing: 4px; }
-  .conexao        { font-size: 0.6rem; padding: 3px 8px; }
+  .subtitulo  { display: none; }
+  .logo-img   { height: 30px; }
+  .conexao    { font-size: 0.6rem; padding: 3px 8px; }
 }

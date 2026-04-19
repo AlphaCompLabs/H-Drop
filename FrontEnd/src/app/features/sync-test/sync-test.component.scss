@@ -21,14 +21,15 @@
   color: var(--c-text);
   transition: all var(--t-fast);
 
-  span { font-size: 1rem; letter-spacing: 2px; font-weight: 700; }
-  small { font-size: 0.7rem; color: var(--c-text-dim); }
+  iconify-icon { font-size: 28px; color: var(--c-text-dim); transition: color var(--t-fast); }
+  span  { font-size: 0.95rem; letter-spacing: 2px; font-weight: 700; }
+  small { font-size: 0.7rem;  color: var(--c-text-dim); }
 
   &:hover { transform: translateY(-1px); }
-  &.start:hover { border-color: var(--c-life-green);    span { color: var(--c-life-green); } }
-  &.ack:hover   { border-color: var(--c-accent);        span { color: var(--c-accent); } }
-  &.home:hover  { border-color: var(--c-safety-yellow); span { color: var(--c-safety-yellow); } }
-  &.stop:hover  { border-color: var(--c-strategic-red); span { color: var(--c-strategic-red); } }
+  &.start:hover { border-color: var(--c-life-green);    span, iconify-icon { color: var(--c-life-green); } }
+  &.ack:hover   { border-color: var(--c-accent);        span, iconify-icon { color: var(--c-accent); } }
+  &.home:hover  { border-color: var(--c-safety-yellow); span, iconify-icon { color: var(--c-safety-yellow); } }
+  &.stop:hover  { border-color: var(--c-strategic-red); span, iconify-icon { color: var(--c-strategic-red); } }
 }
 
 .log-titulo { margin-top: var(--sp-4); }

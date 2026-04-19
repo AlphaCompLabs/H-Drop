@@ -28,16 +28,16 @@ type AbaMobile = 'mapa' | 'telemetria' | 'sync';
   ],
   template: `
     <header class="header">
-      <div class="logo">
-        <div class="logo-icon" aria-hidden="true"></div>
-        <div class="logo-text">
-          <h1>H-DROP</h1>
-          <span class="mono">MISSION CONTROL</span>
-        </div>
-      </div>
+      <a class="logo" href="#" aria-label="H-DROP Mission Control">
+        <img src="assets/images/logo-hdrop-dark.png"  class="logo-img dark"  alt="H-DROP" />
+        <img src="assets/images/logo-hdrop-light.png" class="logo-img light" alt="H-DROP" />
+        <span class="mono subtitulo">MISSION CONTROL</span>
+      </a>
       <div class="acoes">
         <hd-theme-toggle />
-        <div class="conexao mono" [class.on]="telemetria.estado() === 'ONLINE'" [class.mid]="telemetria.estado() === 'CONECTANDO'">
+        <div class="conexao mono"
+             [class.on]="telemetria.estado() === 'ONLINE'"
+             [class.mid]="telemetria.estado() === 'CONECTANDO'">
           {{ telemetria.estado() }}
         </div>
       </div>
