@@ -32,16 +32,14 @@
 
 ## Sobre o Projeto
 
-O **H-DROP** é um **Veículo de Superfície Autônomo (ASV)** do tipo catamarã, projetado para missões de **logística humanitária e entregas em regiões de difícil acesso terrestre** — áreas alagadas, comunidades ribeirinhas e cenários pós-desastre onde a via aquática é a rota mais viável.
-
-A embarcação opera de forma autônoma a partir de um sistema embarcado ESP32, com propulsão por motores brushless em configuração diferencial, posicionamento via GNSS, bússola magnética e conectividade móvel 4G LTE através do módulo A7670SA. O software da estação base — composto por **backend FastAPI** e **frontend Angular** — atua como **Estação de Controle de Missão**, recebendo telemetria em tempo real, monitorando subsistemas críticos e despachando waypoints ao barco.
+O **H-DROP** é um **Veículo de Superfície Autônomo (ASV)** do tipo catamarã, dundamentado no conceito de Dual-use: uma plataforma versátil projetada para atuar na logística humanitária — atendendo populações isoladas e cenários pós-desastre — e no delivery comercial de última milha (last-mile) em canais urbanos e condomínios náuticos. A embarcação é tracionada por propulsão diferencial via **motores brushless** e gerenciada por um sistema embarcado **ESP32** sob o sistema operacional de tempo real FreeRTOS, garantindo processamento assíncrono para navegação autônoma e telemetria via rede **4G LTE**. A infraestrutura de controle opera como uma Estação de Controle de Missão (GCS), permitindo o monitoramento tático de subsistemas e o despacho dinâmico de waypoints através de uma arquitetura baseada em **FastAPI e Angular**.
 
 ### Objetivos
 
-- Automatizar entregas aquáticas em rotas programáveis por waypoints.
-- Monitorar em tempo real a posição (GPS suavizado), proa magnética, estado de bateria (LiFePO4 + INA226) e presença de carga (célula HX711).
-- Oferecer uma interface operacional tática (Mission Control) responsiva, com suporte a dispositivos móveis para operação em campo.
-- Garantir rastreabilidade completa da missão via logs estruturados e persistência (roadmap).
+- **Versatilidade Operacional (Dual-use):** Automatizar o transporte aquático de cargas, alternando entre o suporte emergencial de insumos vitais e a distribuição comercial rotineira por rotas programáveis.
+- **Monitoramento e Consciência Situacional:** Implementar o rastreio em tempo real de coordenadas GNSS, proa magnética absoluta e telemetria energética baseada em Lógica Fuzzy e Contagem de Coulomb.
+- **Gestão Logística Inteligente:** Validar o ciclo completo de entrega através de detecção binária de carga e fornecer uma interface tática (Mission Control) otimizada para dispositivos móveis em campo.
+- **Segurança e Confiabilidade:** Mitigar riscos operacionais via sistemas de proteção anticolisão e protocolos de preservação de hardware, garantindo a integridade da carga e a estabilidade do sistema sob perturbações ambientais.
 
 ---
 
