@@ -60,6 +60,16 @@ const CAMADAS: Record<CamadaTipo, { url: string; attribution: string; maxZoom: n
       </div>
     }
 
+    <button
+      type="button"
+      class="btn-centrar"
+      [class.sem-fix]="!temPosicao()"
+      [disabled]="!temPosicao()"
+      (click)="centralizarBarco()"
+      title="Centralizar no barco">
+      <iconify-icon icon="ph:crosshair-bold"></iconify-icon>
+    </button>
+
     <div class="camadas" role="group" aria-label="Camadas do mapa">
       <div class="cam-titulo mono"><iconify-icon icon="ph:stack-bold"></iconify-icon> CAMADAS</div>
       @for (c of tiposCamada; track c) {
@@ -100,6 +110,7 @@ export class MapComponent implements AfterViewInit {
   readonly tiposCamada: CamadaTipo[] = ['dark', 'street', 'satellite'];
   readonly camadaAtiva = signal<CamadaTipo>('dark');
   readonly distanciaTexto = signal<string>('');
+  readonly temPosicao = signal(false);
 
   private posicaoAtual: [number, number] | null = null;
   private posicaoDestino: [number, number] | null = null;
@@ -143,6 +154,7 @@ export class MapComponent implements AfterViewInit {
   private atualizarBarco(lat: number, lng: number): void {
     if (!this.mapa) return;
     this.posicaoAtual = [lat, lng];
+    this.temPosicao.set(true);
 
     if (!this.marcadorBarco) {
       this.marcadorBarco = L.marker(this.posicaoAtual, {
@@ -206,6 +218,11 @@ export class MapComponent implements AfterViewInit {
       this.posicaoDestino[1],
     );
     this.distanciaTexto.set(formatarDistancia(m));
+  }
+
+  centralizarBarco(): void {
+    if (!this.mapa || !this.posicaoAtual) return;
+    this.mapa.panTo(this.posicaoAtual, { animate: true, duration: 0.5 });
   }
 
   trocarCamada(tipo: CamadaTipo): void {
