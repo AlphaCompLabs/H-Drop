@@ -48,10 +48,137 @@ O **H-DROP** é um **Veículo de Superfície Autônomo (ASV)** do tipo catamarã
 O sistema é composto por três camadas independentes que se comunicam via protocolo MQTT e WebSocket:
 
 ```
-H-Drop/
-├── BackEnd/     → API REST em Python/FastAPI + cliente MQTT assíncrono
-├── FrontEnd/    → SPA (Single Page Application) em Angular 19 com Leaflet
-└── Docs/        → Documentação técnica, relatório PC1 e diagramas dos subsistemas
+├── 📁 BackEnd
+│   ├── 📁 src
+│   │   ├── 📁 api
+│   │   │   ├── 📁 v1
+│   │   │   │   ├── 📁 routes
+│   │   │   │   │   ├── 🐍 __init__.py
+│   │   │   │   │   ├── 🐍 comando.py
+│   │   │   │   │   ├── 🐍 health.py
+│   │   │   │   │   └── 🐍 telemetria.py
+│   │   │   │   ├── 🐍 __init__.py
+│   │   │   │   └── 🐍 router.py
+│   │   │   └── 🐍 __init__.py
+│   │   ├── 📁 core
+│   │   │   ├── 🐍 __init__.py
+│   │   │   ├── 🐍 config.py
+│   │   │   ├── 🐍 lifespan.py
+│   │   │   └── 🐍 logging.py
+│   │   ├── 📁 models
+│   │   │   └── 🐍 __init__.py
+│   │   ├── 📁 schemas
+│   │   │   ├── 🐍 __init__.py
+│   │   │   ├── 🐍 comando.py
+│   │   │   └── 🐍 telemetria.py
+│   │   ├── 📁 services
+│   │   │   ├── 🐍 __init__.py
+│   │   │   ├── 🐍 mqtt_service.py
+│   │   │   ├── 🐍 telemetria_service.py
+│   │   │   └── 🐍 websocket_manager.py
+│   │   ├── 📁 utils
+│   │   │   ├── 🐍 __init__.py
+│   │   │   ├── 🐍 geo.py
+│   │   │   └── 🐍 sensores.py
+│   │   └── 🐍 __init__.py
+│   ├── ⚙️ .env.example
+│   ├── ⚙️ .gitignore
+│   ├── 📝 README.md
+│   ├── 🐍 main.py
+│   └── 📄 requirements.txt
+├── 📁 Docs
+│   ├── 📕 REACT LIVRO.pdf
+│   ├── 📝 README.md
+│   ├── 📕 Relatório PC1.pdf
+│   ├── 📕 Subsistema_Comunicação_Posicionamento_Módulo_4G_GNSS_TCC.pdf
+│   ├── 📕 Subsistema_Controlador_TCC (1).pdf
+│   ├── 📕 Subsistema_de_Alimentação_TCC (1).pdf
+│   ├── 🖼️ WhatsApp Image 2026-03-01 at 10.31.07.jpeg
+│   └── 📕 roteiro_proposta_projeto.pdf
+├── 📁 FrontEnd
+│   ├── 📁 .angular
+│   ├── 📁 src
+│   │   ├── 📁 app
+│   │   │   ├── 📁 core
+│   │   │   │   ├── 📁 models
+│   │   │   │   │   ├── 📄 alerta.model.ts
+│   │   │   │   │   ├── 📄 comando.model.ts
+│   │   │   │   │   ├── 📄 status.model.ts
+│   │   │   │   │   └── 📄 telemetria.model.ts
+│   │   │   │   └── 📁 services
+│   │   │   │       ├── 📄 alerts.service.ts
+│   │   │   │       ├── 📄 comando.service.ts
+│   │   │   │       ├── 📄 geo.util.ts
+│   │   │   │       ├── 📄 telemetria.service.ts
+│   │   │   │       └── 📄 theme.service.ts
+│   │   │   ├── 📁 features
+│   │   │   │   ├── 📁 map
+│   │   │   │   │   ├── 🎨 map.component.scss
+│   │   │   │   │   └── 📄 map.component.ts
+│   │   │   │   ├── 📁 mission-control
+│   │   │   │   │   ├── 🎨 mission-control.component.scss
+│   │   │   │   │   └── 📄 mission-control.component.ts
+│   │   │   │   ├── 📁 sidebar
+│   │   │   │   │   ├── 🎨 sidebar.component.scss
+│   │   │   │   │   └── 📄 sidebar.component.ts
+│   │   │   │   └── 📁 sync-test
+│   │   │   │       ├── 🎨 sync-test.component.scss
+│   │   │   │       └── 📄 sync-test.component.ts
+│   │   │   ├── 📁 shared
+│   │   │   │   └── 📁 components
+│   │   │   │       ├── 📁 alert-overlay
+│   │   │   │       │   ├── 🎨 alert-overlay.component.scss
+│   │   │   │       │   └── 📄 alert-overlay.component.ts
+│   │   │   │       ├── 📁 compass
+│   │   │   │       │   ├── 🎨 compass.component.scss
+│   │   │   │       │   └── 📄 compass.component.ts
+│   │   │   │       ├── 📁 status-bar
+│   │   │   │       │   ├── 🎨 status-bar.component.scss
+│   │   │   │       │   └── 📄 status-bar.component.ts
+│   │   │   │       ├── 📁 telemetry-card
+│   │   │   │       │   ├── 🎨 telemetry-card.component.scss
+│   │   │   │       │   └── 📄 telemetry-card.component.ts
+│   │   │   │       └── 📁 theme-toggle
+│   │   │   │           └── 📄 theme-toggle.component.ts
+│   │   │   ├── 📄 app.component.ts
+│   │   │   ├── 📄 app.config.ts
+│   │   │   └── 📄 app.routes.ts
+│   │   ├── 📁 assets
+│   │   │   ├── 📁 favicon
+│   │   │   │   └── 📝 README.md
+│   │   │   └── 📁 images
+│   │   │       ├── 📝 README.md
+│   │   │       ├── 🖼️ logo-hdrop-dark.png
+│   │   │       └── 🖼️ logo-hdrop-light.png
+│   │   ├── 📁 environments
+│   │   │   ├── 📄 environment.prod.ts
+│   │   │   └── 📄 environment.ts
+│   │   ├── 🌐 index.html
+│   │   ├── 📄 main.ts
+│   │   └── 🎨 styles.scss
+│   ├── ⚙️ .gitignore
+│   ├── 📝 README.md
+│   ├── ⚙️ angular.json
+│   ├── ⚙️ package-lock.json
+│   ├── ⚙️ package.json
+│   ├── ⚙️ tsconfig.app.json
+│   └── ⚙️ tsconfig.json
+├── 📁 GPS
+│   ├── 📝 README.md
+│   └── 📄 hdrop_barco_autonomo.ino
+├── 📁 Sensor
+│   ├── 📁 include
+│   │   └── 📄 README
+│   ├── 📁 lib
+│   │   └── 📄 README
+│   ├── 📁 src
+│   │   └── ⚡ main.cpp
+│   ├── 📁 test
+│   │   └── 📄 README
+│   ├── ⚙️ .gitignore
+│   ├── 📝 README.md
+│   └── ⚙️ platformio.ini
+└── 📝 README.md
 ```
 
 ### Fluxo de Dados
