@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HDrop ASV — Dashboard</title>
+<style>
+  :root {
+    --bg:       #0a0f1a;
+    --panel:    #111827;
+    --border:   #1e3a5f;
+    --accent:   #0ea5e9;
+    --teal:     #14b8a6;
+    --amber:    #f59e0b;
+    --red:      #ef4444;
+    --green:    #22c55e;
+    --muted:    #64748b;
+    --text:     #e2e8f0;
+    --textdim:  #94a3b8;
+    --font:     'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ─────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 18px; color: var(--accent); letter-spacing: 2px; }
+  header h1 span { color: var(--teal); }
+  .hdr-status { display: flex; gap: 16px; align-items: center; }
+  .dot {
+    display: inline-block; width: 9px; height: 9px;
+    border-radius: 50%; background: var(--muted);
+    box-shadow: 0 0 0 0 transparent;
+    transition: background .3s, box-shadow .3s;
+  }
+  .dot.on  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.warn{ background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .dot.off { background: var(--red);   box-shadow: 0 0 6px var(--red);   }
+  .pill {
+    padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;
+    border: 1px solid currentColor; letter-spacing: 1px;
+  }
+  #fsm-badge { color: var(--amber); }
+  #time-lbl  { color: var(--muted); font-size: 11px; }
+
+  /* ── Grid ───────────────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr 260px;
+    grid-template-rows: auto auto;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  /* ── Panel ──────────────────────────────────────── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    position: relative;
+  }
+  .panel-title {
+    font-size: 10px; letter-spacing: 2px; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 10px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+
+  /* ── Route Map ───────────────────────────────────── */
+  #map-panel { grid-column: 2; grid-row: 1 / 3; }
+  #map-canvas { width: 100%; border-radius: 6px; display: block; }
+
+  /* ── Compass ─────────────────────────────────────── */
+  #compass-panel { grid-column: 1; grid-row: 1; }
+  #compass-canvas { display: block; margin: 0 auto; }
+
+  /* ── Battery ─────────────────────────────────────── */
+  #bat-panel { grid-column: 3; grid-row: 1; }
+  #bat-canvas { display: block; margin: 0 auto; }
+  .bat-data { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 8px; }
+  .kv { display: flex; justify-content: space-between; }
+  .kv .k { color: var(--muted); }
+  .kv .v { color: var(--accent); }
+
+  /* ── GNSS ────────────────────────────────────────── */
+  #gnss-panel { grid-column: 1; grid-row: 2; }
+  .kv-list { display: flex; flex-direction: column; gap: 5px; }
+
+  /* ── ESC ─────────────────────────────────────────── */
+  #esc-panel { grid-column: 3; grid-row: 2; }
+  .esc-row { margin-bottom: 12px; }
+  .esc-label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .esc-track {
+    position: relative; height: 18px;
+    background: #0f1f35; border-radius: 4px; overflow: hidden;
+  }
+  .esc-neutral {
+    position: absolute; left: 50%; top: 0;
+    width: 2px; height: 100%; background: var(--muted); transform: translateX(-50%);
+  }
+  .esc-bar {
+    position: absolute; top: 2px; height: 14px; border-radius: 3px;
+    transition: left .15s, width .15s, background .15s;
+  }
+  .esc-us { color: var(--accent); font-size: 12px; }
+
+  /* ── Ultrasonic ──────────────────────────────────── */
+  #us-panel { grid-column: 1; grid-row: 3; }
+  .us-bar-wrap {
+    position: relative; height: 20px;
+    background: #0f1f35; border-radius: 4px; overflow: hidden; margin: 8px 0;
+  }
+  .us-bar {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--teal), var(--accent));
+    transition: width .15s, background .15s;
+  }
+  #alarm-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: bold;
+    background: #1f2937; color: var(--muted);
+    transition: background .3s, color .3s;
+  }
+  #alarm-badge.on { background: var(--red); color: #fff; box-shadow: 0 0 8px var(--red); }
+
+  /* ── Magnetometer ────────────────────────────────── */
+  #mag-panel { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; gap: 8px; }
+
+  /* wait, let me reconsider the layout for row 3 */
+  /* ── Log ─────────────────────────────────────────── */
+  #log-panel { grid-column: 3; grid-row: 3; }
+  #log-box {
+    height: 150px; overflow-y: auto;
+    background: #070d17; border-radius: 4px;
+    padding: 6px; font-size: 11px; color: var(--textdim);
+    scroll-behavior: smooth;
+  }
+  #log-box p { margin: 0 0 2px; line-height: 1.5; border-bottom: 1px solid #0f1a2e; }
+  #log-box p.warn { color: var(--amber); }
+  #log-box p.err  { color: var(--red); }
+  #log-box p.ok   { color: var(--green); }
+
+  /* ── Row 3 sub-grid ─────────────────────────────── */
+  .row3 {
+    grid-column: 1 / 4;
+    display: grid;
+    grid-template-columns: 280px 1fr 260px;
+    gap: 10px;
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #0a0f1a; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* connection banner */
+  #conn-banner {
+    display: none; position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--red); color: #fff; padding: 8px 20px; border-radius: 8px;
+    font-size: 12px; letter-spacing: 1px; z-index: 99;
+    box-shadow: 0 4px 20px rgba(239,68,68,.5);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>HD<span>ROP</span> ASV</h1>
+  <div class="hdr-status">
+    <span><span class="dot" id="dot-mqtt"></span> MQTT</span>
+    <span><span class="dot" id="dot-gnss"></span> GNSS</span>
+    <span class="pill" id="fsm-badge">—</span>
+    <span id="time-lbl">t = 0 s</span>
+  </div>
+</header>
+
+<main>
+  <!-- Compass -->
+  <div class="panel" id="compass-panel">
+    <div class="panel-title">Orientação</div>
+    <canvas id="compass-canvas" width="276" height="276"></canvas>
+    <div class="kv-list" style="margin-top:10px">
+      <div class="kv"><span class="k">Heading Mag</span><span class="v" id="hdg-val">—°</span></div>
+      <div class="kv"><span class="k">Bearing Alvo</span><span class="v" id="brg-val">—°</span></div>
+      <div class="kv"><span class="k">Erro Heading</span><span class="v" id="herr-val">—°</span></div>
+      <div class="kv"><span class="k">Distância</span><span class="v" id="dist-val">— m</span></div>
+    </div>
+  </div>
+
+  <!-- Route Map -->
+  <div class="panel" id="map-panel">
+    <div class="panel-title">Rota A → B</div>
+    <canvas id="map-canvas" width="600" height="460"></canvas>
+  </div>
+
+  <!-- Battery -->
+  <div class="panel" id="bat-panel">
+    <div class="panel-title">Bateria LiFePO4 4S</div>
+    <canvas id="bat-canvas" width="240" height="150"></canvas>
+    <div class="bat-data">
+      <div class="kv"><span class="k">Tensão</span><span class="v" id="bat-v">—V</span></div>
+      <div class="kv"><span class="k">Corrente</span><span class="v" id="bat-i">—A</span></div>
+      <div class="kv"><span class="k">Potência</span><span class="v" id="bat-w">—W</span></div>
+      <div class="kv"><span class="k">Energia</span><span class="v" id="bat-wh">—Wh</span></div>
+    </div>
+    <!-- ESC bars below battery -->
+    <div style="margin-top:14px">
+      <div class="panel-title" style="margin-bottom:8px">ESC — Pulso PWM</div>
+      <div class="esc-row">
+        <div class="esc-label">
+          <span style="color:var(--teal)">◄ Bombordo</span>
+          <span class="esc-us" id="esc-bb-val">1500 µs</span>
+        </div>
+        <div class="esc-track">
+          <div class="esc-neutral"></div>
+          <div class="esc-bar" id="esc-bb-bar"></div>
+        </div>
+      </div>
+      <div class="esc-row">
+        <div class="esc-label">
+          <span style="color:var(--accent)">Estibordo ►</span>
+          <span class="esc-us" id="esc-eb-val">1500 µs</span>
+        </div>
+        <div class="esc-track">
+          <div class="esc-neutral"></div>
+          <div class="esc-bar" id="esc-eb-bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3 wrapper -->
+  <div class="row3">
+    <!-- GNSS -->
+    <div class="panel">
+      <div class="panel-title">GNSS / A7670SA (simulado)</div>
+      <div class="kv-list">
+        <div class="kv"><span class="k">Latitude</span><span class="v" id="g-lat">—</span></div>
+        <div class="kv"><span class="k">Longitude</span><span class="v" id="g-lon">—</span></div>
+        <div class="kv"><span class="k">SOG</span><span class="v" id="g-sog">— km/h</span></div>
+        <div class="kv"><span class="k">COG</span><span class="v" id="g-cog">—°</span></div>
+        <div class="kv"><span class="k">HDOP</span><span class="v" id="g-hdop">—</span></div>
+        <div class="kv"><span class="k">Satélites</span><span class="v" id="g-sats">—</span></div>
+        <div style="margin-top:10px" class="panel-title">Ultrassônico AJ-SR04M (simulado)</div>
+        <div class="kv"><span class="k">Distância</span><span class="v" id="us-dist-val">— cm</span></div>
+        <div class="kv"><span class="k">y_norm</span><span class="v" id="us-y-val">—</span></div>
+        <div class="kv" style="align-items:center">
+          <span class="k">Alarme</span><span id="alarm-badge">LIVRE</span>
+        </div>
+        <div class="us-bar-wrap"><div class="us-bar" id="us-bar"></div></div>
+      </div>
+    </div>
+
+    <!-- Magnetometer + mission info -->
+    <div class="panel">
+      <div class="panel-title">Magnetômetro QMC5883L</div>
+      <div class="kv-list">
+        <div class="kv"><span class="k">X (raw)</span><span class="v" id="mag-x">—</span></div>
+        <div class="kv"><span class="k">Y (raw)</span><span class="v" id="mag-y">—</span></div>
+        <div class="kv"><span class="k">Z (raw)</span><span class="v" id="mag-z">—</span></div>
+        <div class="kv"><span class="k">Heading calc.</span><span class="v" id="mag-hdg">—°</span></div>
+      </div>
+      <div style="margin-top:14px" class="panel-title">Missão</div>
+      <div class="kv-list">
+        <div class="kv"><span class="k">Origem A</span><span class="v" id="wp-a">—</span></div>
+        <div class="kv"><span class="k">Destino B</span><span class="v" id="wp-b">—</span></div>
+        <div class="kv"><span class="k">Status</span><span class="v" id="mission-st">—</span></div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="panel">
+      <div class="panel-title">Log do Sistema</div>
+      <div id="log-box"></div>
+    </div>
+  </div>
+</main>
+
+<div id="conn-banner">⚠ Servidor desconectado — reinicie hdrop_sim.py</div>
+
+<script>
+// ── Helpers ────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+function fmt(n, dec=2) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toFixed(dec);
+}
+
+// ── Canvas helpers ──────────────────────────────────────────────────────────
+function dpr() { return window.devicePixelRatio || 1; }
+
+function hiDPI(canvas) {
+  const r = dpr();
+  const w = canvas.width, h = canvas.height;
+  canvas.width  = w * r;
+  canvas.height = h * r;
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(r, r);
+  return { ctx, w, h };
+}
+
+// ── Compass ─────────────────────────────────────────────────────────────────
+const compassC = $('compass-canvas');
+const { ctx: cc, w: CW, h: CH } = hiDPI(compassC);
+const CX = CW/2, CY = CH/2, CR = CW/2 - 16;
+
+function drawCompass(heading, bearing) {
+  cc.clearRect(0, 0, CW, CH);
+
+  // outer ring
+  cc.beginPath();
+  cc.arc(CX, CY, CR, 0, Math.PI*2);
+  cc.strokeStyle = '#1e3a5f';
+  cc.lineWidth = 2;
+  cc.stroke();
+
+  // cardinal ticks
+  const cards = ['N','NE','E','SE','S','SO','O','NO'];
+  cards.forEach((lbl, i) => {
+    const a = (i/8)*Math.PI*2 - Math.PI/2;
+    const r0 = CR - (i%2===0 ? 12 : 8);
+    cc.beginPath();
+    cc.moveTo(CX + Math.cos(a)*r0, CY + Math.sin(a)*r0);
+    cc.lineTo(CX + Math.cos(a)*CR, CY + Math.sin(a)*CR);
+    cc.strokeStyle = i%2===0 ? '#1e3a5f' : '#0f2035';
+    cc.lineWidth = i%2===0 ? 2 : 1;
+    cc.stroke();
+    if (i%2===0) {
+      cc.fillStyle = lbl==='N' ? '#ef4444' : '#64748b';
+      cc.font = `bold ${lbl==='N'?12:10}px Courier New`;
+      cc.textAlign = 'center'; cc.textBaseline = 'middle';
+      cc.fillText(lbl, CX + Math.cos(a)*(CR-20), CY + Math.sin(a)*(CR-20));
+    }
+  });
+
+  // degree marks every 30°
+  for (let d=0; d<360; d+=30) {
+    const a = (d-90)*Math.PI/180;
+    cc.beginPath();
+    cc.moveTo(CX + Math.cos(a)*(CR-5), CY + Math.sin(a)*(CR-5));
+    cc.lineTo(CX + Math.cos(a)*CR, CY + Math.sin(a)*CR);
+    cc.strokeStyle = '#1e3a5f';
+    cc.lineWidth = 1;
+    cc.stroke();
+  }
+
+  // bearing arrow (amber, thin)
+  if (bearing !== null) {
+    const ba = (bearing - 90)*Math.PI/180;
+    cc.beginPath();
+    cc.moveTo(CX, CY);
+    cc.lineTo(CX + Math.cos(ba)*(CR-8), CY + Math.sin(ba)*(CR-8));
+    cc.strokeStyle = 'rgba(245,158,11,0.55)';
+    cc.lineWidth = 2;
+    cc.setLineDash([6,4]);
+    cc.stroke();
+    cc.setLineDash([]);
+  }
+
+  // heading needle (teal/red)
+  if (heading !== null) {
+    const ha = (heading - 90)*Math.PI/180;
+    const NL = CR - 6, RL = CR*0.35;
+    // north (teal)
+    cc.beginPath();
+    cc.moveTo(CX, CY);
+    cc.lineTo(CX + Math.cos(ha)*NL, CY + Math.sin(ha)*NL);
+    cc.strokeStyle = '#14b8a6';
+    cc.lineWidth = 3;
+    cc.stroke();
+    // south (dim)
+    cc.beginPath();
+    cc.moveTo(CX, CY);
+    cc.lineTo(CX - Math.cos(ha)*RL, CY - Math.sin(ha)*RL);
+    cc.strokeStyle = '#1e3a5f';
+    cc.lineWidth = 3;
+    cc.stroke();
+    // center dot
+    cc.beginPath();
+    cc.arc(CX, CY, 5, 0, Math.PI*2);
+    cc.fillStyle = '#0ea5e9';
+    cc.fill();
+  }
+}
+
+// ── Battery gauge ──────────────────────────────────────────────────────────
+const batC = $('bat-canvas');
+const { ctx: bc, w: BW, h: BH } = hiDPI(batC);
+const BX = BW/2, BY = BH*0.82, BR = BW*0.42;
+
+function drawBattery(soc) {
+  bc.clearRect(0, 0, BW, BH);
+  const start = Math.PI*0.75, end = Math.PI*2.25;
+  const sweep = end - start;
+  const filled = start + sweep*(soc/100);
+
+  // track
+  bc.beginPath();
+  bc.arc(BX, BY, BR, start, end);
+  bc.strokeStyle = '#0f2035';
+  bc.lineWidth = 12;
+  bc.lineCap = 'round';
+  bc.stroke();
+
+  // fill colour
+  const color = soc > 50 ? '#22c55e' : soc > 20 ? '#f59e0b' : '#ef4444';
+  bc.beginPath();
+  bc.arc(BX, BY, BR, start, filled);
+  bc.strokeStyle = color;
+  bc.lineWidth = 12;
+  bc.lineCap = 'round';
+  bc.stroke();
+
+  // percentage text
+  bc.fillStyle = color;
+  bc.font = `bold 28px Courier New`;
+  bc.textAlign = 'center'; bc.textBaseline = 'middle';
+  bc.fillText(Math.round(soc)+'%', BX, BY - BR*0.25);
+  bc.fillStyle = '#64748b';
+  bc.font = `11px Courier New`;
+  bc.fillText('SOC', BX, BY - BR*0.25 + 22);
+}
+
+// ── Route map ──────────────────────────────────────────────────────────────
+const mapC = $('map-canvas');
+const { ctx: mc, w: MW, h: MH } = hiDPI(mapC);
+
+function ll2px(lat, lon, bounds, pad=30) {
+  const { latMin, latMax, lonMin, lonMax } = bounds;
+  const x = pad + ((lon - lonMin)/(lonMax - lonMin)) * (MW - 2*pad);
+  const y = pad + ((latMax - lat)/(latMax - latMin)) * (MH - 2*pad);
+  return [x, y];
+}
+
+function drawMap(state) {
+  mc.clearRect(0, 0, MW, MH);
+
+  const nav = state.nav;
+  if (!nav) return;
+
+  const pts = [
+    [nav.lat_a, nav.lon_a],
+    [nav.lat_b, nav.lon_b],
+    [state.gnss.lat, state.gnss.lon],
+    ...(nav.track || []).map(t => [t[0], t[1]])
+  ];
+
+  const lats = pts.map(p=>p[0]);
+  const lons = pts.map(p=>p[1]);
+  let latMin = Math.min(...lats), latMax = Math.max(...lats);
+  let lonMin = Math.min(...lons), lonMax = Math.max(...lons);
+  const dLat = latMax-latMin, dLon = lonMax-lonMin;
+  const pad = 0.1;
+  latMin -= dLat*pad + 0.001; latMax += dLat*pad + 0.001;
+  lonMin -= dLon*pad + 0.001; lonMax += dLon*pad + 0.001;
+  const bounds = { latMin, latMax, lonMin, lonMax };
+
+  // grid lines
+  mc.strokeStyle = '#0f1a2e';
+  mc.lineWidth = 1;
+  for (let i=1; i<5; i++) {
+    const y = (MH/5)*i;
+    mc.beginPath(); mc.moveTo(0,y); mc.lineTo(MW,y); mc.stroke();
+    const x = (MW/5)*i;
+    mc.beginPath(); mc.moveTo(x,0); mc.lineTo(x,MH); mc.stroke();
+  }
+
+  // straight A→B line
+  const [ax,ay] = ll2px(nav.lat_a, nav.lon_a, bounds);
+  const [bx,by] = ll2px(nav.lat_b, nav.lon_b, bounds);
+  mc.beginPath();
+  mc.moveTo(ax,ay); mc.lineTo(bx,by);
+  mc.strokeStyle = 'rgba(14,165,233,0.18)';
+  mc.lineWidth = 1.5;
+  mc.setLineDash([8,6]);
+  mc.stroke();
+  mc.setLineDash([]);
+
+  // boat trail
+  const track = nav.track || [];
+  if (track.length > 1) {
+    mc.beginPath();
+    const [tx0,ty0] = ll2px(track[0][0],track[0][1],bounds);
+    mc.moveTo(tx0,ty0);
+    for (let i=1; i<track.length; i++) {
+      const [tx,ty] = ll2px(track[i][0],track[i][1],bounds);
+      mc.lineTo(tx,ty);
+    }
+    mc.strokeStyle = 'rgba(20,184,166,0.6)';
+    mc.lineWidth = 2;
+    mc.stroke();
+  }
+
+  // Point A
+  mc.beginPath();
+  mc.arc(ax,ay,8,0,Math.PI*2);
+  mc.fillStyle = '#22c55e22';
+  mc.fill();
+  mc.beginPath();
+  mc.arc(ax,ay,5,0,Math.PI*2);
+  mc.fillStyle = '#22c55e';
+  mc.fill();
+  mc.fillStyle = '#22c55e';
+  mc.font = 'bold 12px Courier New';
+  mc.textAlign = 'left'; mc.textBaseline = 'bottom';
+  mc.fillText('A', ax+9, ay-4);
+
+  // Point B
+  mc.beginPath();
+  mc.arc(bx,by,8,0,Math.PI*2);
+  mc.fillStyle = '#f59e0b22';
+  mc.fill();
+  mc.beginPath();
+  mc.arc(bx,by,5,0,Math.PI*2);
+  mc.fillStyle = '#f59e0b';
+  mc.fill();
+  mc.fillStyle = '#f59e0b';
+  mc.textAlign = 'right'; mc.textBaseline = 'bottom';
+  mc.fillText('B', bx-9, by-4);
+
+  // Boat
+  const [boatX, boatY] = ll2px(state.gnss.lat, state.gnss.lon, bounds);
+  const hdgRad = (nav.heading - 90)*Math.PI/180;
+
+  // heading vector
+  mc.beginPath();
+  mc.moveTo(boatX, boatY);
+  mc.lineTo(boatX + Math.cos(hdgRad)*22, boatY + Math.sin(hdgRad)*22);
+  mc.strokeStyle = '#14b8a6';
+  mc.lineWidth = 2;
+  mc.stroke();
+
+  // boat icon (triangle)
+  mc.save();
+  mc.translate(boatX, boatY);
+  mc.rotate(hdgRad + Math.PI/2);
+  mc.beginPath();
+  mc.moveTo(0, -12);
+  mc.lineTo(7, 8);
+  mc.lineTo(-7, 8);
+  mc.closePath();
+  mc.fillStyle = '#0ea5e9';
+  mc.fill();
+  mc.strokeStyle = '#1e3a5f';
+  mc.lineWidth = 1.5;
+  mc.stroke();
+  mc.restore();
+
+  // distance label
+  mc.fillStyle = '#64748b';
+  mc.font = '11px Courier New';
+  mc.textAlign = 'right'; mc.textBaseline = 'top';
+  mc.fillText(`${fmt(nav.dist_m,0)} m restantes`, MW-10, 10);
+
+  // scale note
+  mc.fillStyle = '#1e3a5f';
+  mc.textAlign = 'left'; mc.textBaseline = 'bottom';
+  mc.fillText('coordenadas simuladas', 10, MH-6);
+}
+
+// ── ESC bar ────────────────────────────────────────────────────────────────
+function updateEscBar(barId, us) {
+  const bar = $(barId);
+  const pct = (us - 1000) / 1000; // 0 (1000µs) → 1 (2000µs), 0.5 = neutral
+  const neutral = 50; // %
+  const pos = pct * 100; // 0..100%
+  const color = us > 1520 ? '#14b8a6' : us < 1480 ? '#ef4444' : '#64748b';
+  if (pos >= neutral) {
+    bar.style.left  = neutral + '%';
+    bar.style.width = (pos - neutral) + '%';
+  } else {
+    bar.style.left  = pos + '%';
+    bar.style.width = (neutral - pos) + '%';
+  }
+  bar.style.background = color;
+}
+
+// ── Log ────────────────────────────────────────────────────────────────────
+let lastLogs = [];
+function updateLog(logs) {
+  if (!logs || !logs.length) return;
+  const box = $('log-box');
+  const same = logs.length === lastLogs.length && logs.every((l,i) => l===lastLogs[i]);
+  if (same) return;
+  lastLogs = [...logs];
+  box.innerHTML = '';
+  logs.forEach(l => {
+    const p = document.createElement('p');
+    const low = l.toLowerCase();
+    if (low.includes('erro') || low.includes('falha') || low.includes('alarm')) p.className='err';
+    else if (low.includes('ok') || low.includes('sucesso') || low.includes('operando')) p.className='ok';
+    else if (low.includes('aviso') || low.includes('warn')) p.className='warn';
+    p.textContent = l;
+    box.appendChild(p);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── FSM badge colour ───────────────────────────────────────────────────────
+function fsmColor(fsm) {
+  if (!fsm) return 'var(--muted)';
+  if (fsm.includes('OPERANDO')) return 'var(--green)';
+  if (fsm.includes('MQTT'))     return 'var(--amber)';
+  return 'var(--red)';
+}
+
+// ── Main update ────────────────────────────────────────────────────────────
+function update(s) {
+  // FSM / header
+  const badge = $('fsm-badge');
+  badge.textContent = s.fsm || '—';
+  badge.style.color = fsmColor(s.fsm);
+  badge.style.borderColor = fsmColor(s.fsm);
+
+  $('dot-mqtt').className = 'dot ' + (s.mqtt ? 'on' : 'off');
+  $('dot-gnss').className = 'dot ' + (s.gnss?.fix ? 'on' : 'warn');
+  $('time-lbl').textContent = `t = ${fmt(s.t,1)} s`;
+
+  // Compass
+  const hdg = s.nav?.heading ?? null;
+  const brg = s.nav?.bearing ?? null;
+  drawCompass(hdg, brg);
+  $('hdg-val').textContent = hdg!==null ? fmt(hdg,1)+'°' : '—°';
+  $('brg-val').textContent = brg!==null ? fmt(brg,1)+'°' : '—°';
+  if (hdg!==null && brg!==null) {
+    let err = brg - hdg;
+    if (err > 180) err -= 360;
+    if (err < -180) err += 360;
+    $('herr-val').textContent = fmt(err,1)+'°';
+  }
+  $('dist-val').textContent = s.nav?.dist_m!==undefined ? fmt(s.nav.dist_m,0)+' m' : '— m';
+
+  // Map
+  drawMap(s);
+
+  // Battery
+  const bat = s.bat || {};
+  drawBattery(bat.soc ?? 0);
+  $('bat-v').textContent  = fmt(bat.v,2)+' V';
+  $('bat-i').textContent  = fmt(bat.i,2)+' A';
+  $('bat-w').textContent  = fmt((bat.v||0)*(bat.i||0),1)+' W';
+  $('bat-wh').textContent = fmt(bat.wh,1)+' Wh';
+
+  // ESC
+  const esc = s.esc || { bb:1500, eb:1500 };
+  updateEscBar('esc-bb-bar', esc.bb);
+  updateEscBar('esc-eb-bar', esc.eb);
+  $('esc-bb-val').textContent = esc.bb+' µs';
+  $('esc-eb-val').textContent = esc.eb+' µs';
+
+  // GNSS
+  const g = s.gnss || {};
+  $('g-lat').textContent  = g.lat!==undefined ? fmt(g.lat,6) : '—';
+  $('g-lon').textContent  = g.lon!==undefined ? fmt(g.lon,6) : '—';
+  $('g-sog').textContent  = g.sog!==undefined ? fmt(g.sog,1)+' km/h' : '—';
+  $('g-cog').textContent  = g.cog!==undefined ? fmt(g.cog,1)+'°' : '—°';
+  $('g-hdop').textContent = g.hdop!==undefined? fmt(g.hdop,2) : '—';
+  $('g-sats').textContent = g.sats!==undefined? g.sats : '—';
+
+  // Ultrasonic
+  const us = s.us || {};
+  $('us-dist-val').textContent = us.dist_cm!==undefined ? fmt(us.dist_cm,1)+' cm' : '—';
+  $('us-y-val').textContent    = us.y_norm!==undefined  ? fmt(us.y_norm,3)  : '—';
+  const usBar = $('us-bar');
+  const usPct = clamp(((us.dist_cm||0)/400)*100, 0, 100);
+  usBar.style.width = usPct+'%';
+  if ((us.dist_cm||999) < 30) usBar.style.background='linear-gradient(90deg,#ef4444,#dc2626)';
+  else if ((us.dist_cm||999) < 80) usBar.style.background='linear-gradient(90deg,#f59e0b,#d97706)';
+  else usBar.style.background='linear-gradient(90deg,#14b8a6,#0ea5e9)';
+  const alarmBadge = $('alarm-badge');
+  if (us.alarm) { alarmBadge.className='on'; alarmBadge.textContent='ALARME'; }
+  else          { alarmBadge.className='';   alarmBadge.textContent='LIVRE';  }
+
+  // Magnetometer
+  const m = s.mag || {};
+  $('mag-x').textContent   = m.x!==undefined ? m.x : '—';
+  $('mag-y').textContent   = m.y!==undefined ? m.y : '—';
+  $('mag-z').textContent   = m.z!==undefined ? m.z : '—';
+  $('mag-hdg').textContent = hdg!==null      ? fmt(hdg,1)+'°' : '—°';
+
+  // Mission
+  const nav2 = s.nav || {};
+  $('wp-a').textContent = nav2.lat_a!==undefined ? fmt(nav2.lat_a,5)+' / '+fmt(nav2.lon_a,5) : '—';
+  $('wp-b').textContent = nav2.lat_b!==undefined ? fmt(nav2.lat_b,5)+' / '+fmt(nav2.lon_b,5) : '—';
+  $('mission-st').textContent = s.arrived ? '✓ CHEGOU' : s.mission ? '▶ ATIVA' : '— AGUARDANDO';
+  $('mission-st').style.color = s.arrived ? 'var(--green)' : s.mission ? 'var(--teal)' : 'var(--muted)';
+
+  // Log
+  updateLog(s.logs);
+}
+
+// ── Polling ────────────────────────────────────────────────────────────────
+let failCount = 0;
+const banner = $('conn-banner');
+
+async function poll() {
+  try {
+    const r = await fetch('/api/state');
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const data = await r.json();
+    failCount = 0;
+    banner.style.display = 'none';
+    update(data);
+  } catch(e) {
+    failCount++;
+    if (failCount >= 3) banner.style.display = 'block';
+  }
+}
+
+// initial draws
+drawCompass(null, null);
+drawBattery(0);
+mc.fillStyle = '#0f1a2e';
+mc.fillRect(0,0,MW,MH);
+
+poll();
+setInterval(poll, 500);
+</script>
+</body>
+</html>

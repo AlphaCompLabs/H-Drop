@@ -86,6 +86,20 @@ O sistema é composto por três camadas independentes que se comunicam via proto
 │   ├── 📝 README.md
 │   ├── 🐍 main.py
 │   └── 📄 requirements.txt
+├── 📁 Controler-Simulation
+│   ├── 📁 .devcontainer
+│   ├── 📁 .vscode
+│   │   ├── {} c_cpp_properties.json
+│   │   ├── {} launch.json
+│   │   └── {} settings.json
+│   ├── 📁 main
+│   │   ├── 🔺 CMakeLists.txt
+│   │   ├── 🅒 main.c
+│   │   └── 📝 README.md
+│   ├── 🔺 CMakeLists.txt
+│   ├── 🌐 dashboard.html
+│   ├── 🐍 hdrop_sim.py
+│   └── 📝 PIPELINE.md
 ├── 📁 Docs
 │   ├── 📕 REACT LIVRO.pdf
 │   ├── 📝 README.md
@@ -166,6 +180,8 @@ O sistema é composto por três camadas independentes que se comunicam via proto
 ├── 📁 GPS
 │   ├── 📝 README.md
 │   └── 📄 hdrop_barco_autonomo.ino
+├── 📁 Motors-Simulation
+│   └── 📄 firmware-motores.ino
 ├── 📁 Sensor
 │   ├── 📁 include
 │   │   └── 📄 README
@@ -259,6 +275,44 @@ mosquitto_pub -h broker.hivemq.com -t hdrop/raw \
 
 O dashboard deve atualizar a posição e a proa em tempo real.
 
+### 4. Executar a Simulação do Controlador
+
+O módulo `Controler-Simulation` permite validar a lógica de navegação e controle PID sem o hardware embarcado. Requer o ESP-IDF instalado e configurado.
+
+```bash
+cd Controler-Simulation
+idf.py build
+idf.py flash monitor   # com hardware conectado
+# ou execute hdrop_sim.py para simulação em Python
+python hdrop_sim.py
+```
+
+O dashboard de simulação pode ser acessado abrindo `dashboard.html` diretamente no navegador. Consulte `PIPELINE.md` para detalhes do fluxo de simulação.
+
+### 5. Carregar o Firmware dos Motores
+
+O módulo `Motors-Simulation` contém o firmware de controle dos ESCs para validação da propulsão diferencial via interface web, desenvolvido no Arduino IDE.
+
+```
+Pré-requisitos:
+- Arduino IDE 2.x
+- Biblioteca ESP32Servo instalada (Gerenciador de Bibliotecas)
+- Placa: ESP32 Dev Module
+```
+
+```bash
+# 1. Abra o arquivo no Arduino IDE:
+Motors-Simulation/firmware-motores.ino
+
+# 2. Edite as credenciais Wi-Fi no início do arquivo:
+const char* ssid     = "NOME_DA_SUA_REDE";
+const char* password = "SENHA_DA_SUA_REDE";
+
+# 3. Selecione a porta COM correta e faça o upload
+```
+
+Após o upload, o IP do ESP32 será exibido no Serial Monitor. Acesse esse IP pelo navegador do celular (na mesma rede) para controlar os motores individualmente via sliders PWM ou pelos botões de ré, frente e parada de emergência.
+
 ---
 
 ## Stack Tecnológica
@@ -276,6 +330,8 @@ O dashboard deve atualizar a posição e a proa em tempo real.
 | Ícones | Iconify (Phosphor Icons) | 2.1+ (via CDN) |
 | Reatividade | RxJS + Angular Signals | — |
 | Broker MQTT | HiveMQ (público) | — |
+| Firmware Motores | Arduino IDE + ESP32Servo | 2.x |
+| Simulação Controlador | ESP-IDF + Python | 5.x / 3.11+ |
 
 ---
 
@@ -307,6 +363,8 @@ Dois temas disponíveis via toggle no header: **Mission Dark** (padrão, otimiza
 | ✓ | Aba Sync Test com comandos rápidos (START/ACK/HOME/STOP) |
 | ✓ | Sistema de alertas críticos com modal bloqueante |
 | ✓ | Troca dinâmica Mission Dark / Utility Light |
+| ✓ | Firmware de validação da propulsão diferencial via interface web (Motors-Simulation) |
+| ✓ | Simulação do controlador embarcado com dashboard e pipeline de testes (Controler-Simulation) |
 | ○ | Persistência de histórico de missões (MongoDB — roadmap Fase 3) |
 | ○ | Monitoramento do SoC da bateria via INA226 (firmware em desenvolvimento) |
 | ○ | Detecção de carga via HX711 (firmware em desenvolvimento) |
@@ -320,6 +378,8 @@ Dois temas disponíveis via toggle no header: **Mission Dark** (padrão, otimiza
 |:---|:---|
 | **Backend — API FastAPI + MQTT** | [BackEnd/README.md](./BackEnd/README.md) |
 | **Frontend — Mission Control Angular** | [FrontEnd/README.md](./FrontEnd/README.md) |
+| **Simulação do Controlador** | [Controler-Simulation/main/README.md](./Controler-Simulation/main/README.md) |
+| **Firmware dos Motores** | [Motors-Simulation/](./Motors-Simulation/) |
 | **Relatório PC1 e subsistemas** | [Docs/](./Docs/) |
 
 ---
