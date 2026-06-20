@@ -1,0 +1,6 @@
+# Pastas de build do ESP-IDF
+build/
+dependencies.lock
+
+# Arquivos de configuração antigos
+sdkconfig.old
