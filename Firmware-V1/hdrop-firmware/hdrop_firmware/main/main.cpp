@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "hdrop_motor.h"
 #include "hdrop_heading.h"
+#include <cmath>
 
 /** Tag de log do módulo principal. */
 static const char *TAG = "MAIN";
@@ -42,47 +43,48 @@ extern "C" void app_main(void)
     }
 
     /* ----------------------------------------------------------------
-     * Calibração hard-iron: 100 amostras ≈ 5 s de rotação manual.
-     * Em produção, chamar apenas quando o ambiente magnético muda
-     * (novo local, alteração da estrutura do veículo).
-     * Comentar as próximas 5 linhas para usar calibração gravada em NVS.
+     * CALIBRAÇÃO — desabilitada para teste de bancada.
+     * Requer rotação completa do veículo (≈ 2 s) para produzir offsets
+     * válidos. Sem movimento, x_min ≈ x_max e y_min ≈ y_max, gerando
+     * offsets errados que prejudicariam as leituras em campo.
+     * Habilitar em ambiente de operação real antes do primeiro deploy.
+     *
+     * heading_calibrate(100);
      * ---------------------------------------------------------------- */
-    ESP_LOGI(TAG, "Iniciando calibração — gire o veículo em círculo completo.");
-    ret = heading_calibrate(100);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Calibração falhou — usando offsets da NVS ou zeros.");
-    }
 
     /* ----------------------------------------------------------------
-     * Verificação de leitura individual antes de ativar o controle.
+     * CONTROLE DE HEADING — desabilitado para teste de bancada.
+     * Sem calibração e sem água, heading_hold() acionaria os motores com
+     * setpoint inválido. Habilitar apenas após calibração em campo.
+     *
+     * heading_hold(0.0f);
      * ---------------------------------------------------------------- */
-    float theta = 0.0f;
-    if (heading_read(&theta)) {
-        ESP_LOGI(TAG, "Heading inicial: %.3f rad (%.1f°)", theta, theta * 180.0f / 3.14159f);
-    } else {
-        ESP_LOGW(TAG, "Leitura de heading falhou (verificar cabeamento I2C).");
-    }
 
     /* ----------------------------------------------------------------
-     * Ativa controle proporcional de heading para norte magnético (0.0 rad).
-     * A heading_task aplica motor_mix() a 10 Hz até |eθ| < 0.1 rad.
+     * TESTE DE BANCADA: verifica comunicação I2C e estabilidade de leitura.
+     * Critério de aceitação: heading estável com variação < 0.05 rad em repouso.
+     * O watchdog do motor é alimentado com velocidade zero — motores ficam
+     * parados mas o timer não dispara.
      * ---------------------------------------------------------------- */
-    ESP_LOGI(TAG, "Ativando controle de heading para norte magnético (0.0 rad).");
-    heading_hold(0.0f);
+    ESP_LOGI(TAG, "Modo bancada: lendo heading a cada 500 ms. Motores parados.");
 
-    /* ----------------------------------------------------------------
-     * Loop principal: alimenta o watchdog do motor e loga heading a 1 Hz.
-     * O controle efetivo ocorre na heading_task — esta task apenas monitora.
-     * ---------------------------------------------------------------- */
+    float theta_ant = 0.0f;
+    bool  primeira  = true;
+
     while (true) {
-        motor_set_speeds(0.0f, 0.0f); /* alimenta o watchdog (será sobrescrito pela heading_task) */
+        motor_set_speeds(0.0f, 0.0f);  /* alimenta o watchdog sem mover os ESCs */
 
+        float theta = 0.0f;
         if (heading_read(&theta)) {
-            ESP_LOGI(TAG, "Heading: %.3f rad (%.1f°) | PWM: esq=%d us dir=%d us",
-                     theta, theta * 180.0f / 3.14159f,
-                     motor_get_last_pwm_left(), motor_get_last_pwm_right());
+            float variacao = primeira ? 0.0f : fabsf(theta - theta_ant);
+            ESP_LOGI(TAG, "Heading: %.3f rad (%.1f°) | var: %.4f rad",
+                     theta, theta * 180.0f / 3.14159f, variacao);
+            theta_ant = theta;
+            primeira  = false;
+        } else {
+            ESP_LOGE(TAG, "Falha I2C — verificar cabeamento SDA/SCL.");
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }

@@ -353,7 +353,7 @@ bool heading_read(float *theta_rad)
 esp_err_t heading_calibrate(uint16_t n_samples)
 {
     ESP_LOGI(TAG, "Iniciando calibração hard-iron (%u amostras, ~%.1f s). Gire o veículo em círculo completo.",
-             n_samples, (float)n_samples * 0.05f);
+             n_samples, (float)n_samples * 0.02f);
 
     /* ----------------------------------------------------------------
      * Suspende a heading_task durante a calibração para evitar conflito
@@ -382,8 +382,10 @@ esp_err_t heading_calibrate(uint16_t n_samples)
             validas++;
         }
 
-        /* 50 ms entre amostras → 20 Hz de coleta durante a rotação manual */
-        vTaskDelay(pdMS_TO_TICKS(50));
+        /* 20 ms entre amostras → 50 Hz de coleta. O QMC5883L atualiza a 200 Hz
+           (nova amostra a cada 5 ms), então 20 ms não perde nenhuma transição
+           relevante e mantém 100 amostras em apenas ~2 s de rotação. */
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 
     if (g_heading_task_handle != nullptr) {
