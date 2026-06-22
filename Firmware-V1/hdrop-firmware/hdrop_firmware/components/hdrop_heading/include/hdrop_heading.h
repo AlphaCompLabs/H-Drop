@@ -31,7 +31,7 @@ extern "C" {
 
 /** Frequência do barramento I2C em Hz. 400 kHz (modo fast) para minimizar
  *  latência de leitura e suportar a taxa de saída de 200 Hz do QMC5883L. */
-#define HEADING_I2C_FREQ_HZ       400000
+#define HEADING_I2C_FREQ_HZ       100000
 
 /* ================================================================
  * QMC5883L — endereço e registradores

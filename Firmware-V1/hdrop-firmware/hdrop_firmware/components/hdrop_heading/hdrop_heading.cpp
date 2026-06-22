@@ -328,9 +328,19 @@ esp_err_t heading_init(void)
         return ret;
     }
 
-    /* Inicializa sensor com soft reset e CTRL1 */
-    ret = qmc_init();
+    /* Inicializa sensor com soft reset e CTRL1 — até 3 tentativas com 500 ms de intervalo.
+     * O QMC5883L pode precisar de alguns milissegundos extras para estabilizar após
+     * a bus recovery ou após um reset de hardware do host. */
+    ret = ESP_FAIL;
+    for (int tentativa = 1; tentativa <= 3 && ret != ESP_OK; tentativa++) {
+        ret = qmc_init();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "QMC5883L tentativa %d/3 falhou. Aguardando 500 ms...", tentativa);
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+    }
     if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "QMC5883L nao respondeu apos 3 tentativas. Verifique VCC e fiacao.");
         return ret;
     }
 
