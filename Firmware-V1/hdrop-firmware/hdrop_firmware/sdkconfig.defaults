@@ -1,0 +1,24 @@
+# Configurações padrão do projeto H-DROP.
+# Este arquivo é aplicado automaticamente pelo ESP-IDF ao gerar um novo sdkconfig.
+# Para aplicar após um sdkconfig existente: delete o sdkconfig e rode "idf.py build".
+
+# Tabela de partições customizada com suporte a OTA
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_ota.csv"
+
+# Flash de 4 MB (chip detectado em hardware, corrige warning "2048k vs 4096k")
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Stack da task interna do esp_timer aumentada de 4 KB para 8 KB.
+# Necessário porque pose_dr_cb é chamado nessa task e chama funções com
+# frames de pilha relevantes (calcular_v_dos_pwms, cosf/sinf, mutex).
+CONFIG_ESP_TIMER_TASK_STACK_SIZE=8192
+
+# Detector de brownout desabilitado para diagnóstico.
+# O A7670SA puxa picos de corrente (~500 mA–2 A) ao tentar registrar na rede
+# celular. Se a fonte de alimentação não tiver capacitância suficiente, a tensão
+# cai abaixo do limiar (~2.43 V) e o ESP32 faz reset de hardware silencioso
+# (sem "Guru Meditation Error"). Desabilitar aqui confirma ou descarta essa causa.
+# ATENÇÃO: reabilitar antes de produção — CONFIG_ESP_BROWNOUT_DET=y
+CONFIG_ESP_BROWNOUT_DET=n

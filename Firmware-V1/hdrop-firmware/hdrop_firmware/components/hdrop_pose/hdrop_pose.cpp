@@ -23,8 +23,10 @@
 
 #include "hdrop_pose.h"
 #include "hdrop_heading.h"
+#include "hdrop_motor.h"
 
 #include "driver/uart.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -55,7 +57,7 @@ static const char *POSE_MQTT_TOPIC_PUB   = "hdrop/raw";
 static const char *POSE_MQTT_TOPIC_SUB   = "hdrop/comando";
 
 /** APN da operadora para ativação do contexto PDP. */
-static const char *POSE_APN              = "tim.br";
+static const char *POSE_APN              = "zap.vivo.com.br";
 
 /** Keepalive MQTT em segundos (manual A7670SA §18). */
 static const int   POSE_MQTT_KEEPALIVE   = 60;
@@ -81,6 +83,10 @@ static const uint32_t POSE_TELEMETRIA_MS = 500;
 
 /** Falhas MQTT consecutivas antes de verificar e reconectar. */
 static const int POSE_MAX_ERROS_MQTT     = 3;
+
+/** Velocidade linear máxima estimada em m/s — calibrar em campo com GPS de referência.
+ *  Usada para converter PWM normalizado em m/s no dead reckoning. */
+static const float V_MAX_MS              = 1.0f;
 
 /* ================================================================
  * Buffers estáticos — declarados em nível de módulo para não usar
@@ -116,6 +122,12 @@ static bool  g_ref_set  = false;
 
 /** Contador de erros MQTT consecutivos — compartilhado entre task e processamento de URCs. */
 static int s_cont_erros_mqtt = 0;
+
+/** Indica se o FSM está em estado OPERANDO (MQTT conectado e publicando). */
+static volatile bool g_mqtt_operando = false;
+
+/** Handle do timer periódico de dead reckoning (10 Hz = 100 ms). */
+static esp_timer_handle_t g_dr_timer = nullptr;
 
 /* ================================================================
  * Estados da FSM de conectividade
@@ -161,7 +173,9 @@ static void drenar_uart(void)
 
     while (agora_ms() - t0 < 30) {
         uint8_t byte;
-        if (uart_read_bytes(UART_NUM_2, &byte, 1, pdMS_TO_TICKS(2)) == 1) {
+        /* pdMS_TO_TICKS(2) = 0 a 100 Hz → busy-loop. Usar 1 tick (~10 ms) para
+         * garantir yield ao idle task e evitar starvation do watchdog. */
+        if (uart_read_bytes(UART_NUM_2, &byte, 1, pdMS_TO_TICKS(10)) == 1) {
             if (total < sizeof(drain) - 1) {
                 drain[total++] = (char)byte;
                 drain[total]   = '\0';
@@ -208,7 +222,7 @@ static bool enviar_at(const char *cmd, const char *esperado,
 
     while (agora_ms() - t0 < timeout_ms) {
         uint8_t byte;
-        if (uart_read_bytes(UART_NUM_2, &byte, 1, pdMS_TO_TICKS(5)) == 1) {
+        if (uart_read_bytes(UART_NUM_2, &byte, 1, pdMS_TO_TICKS(10)) == 1) {
             if (resp_len < sizeof(resp) - 1) {
                 resp[resp_len++] = (char)byte;
                 resp[resp_len]   = '\0';
@@ -259,7 +273,7 @@ static bool enviar_dado_prompt(const char *dado, const char *esperado, uint32_t 
 
     while (agora_ms() - t0 < timeout_ms) {
         uint8_t byte;
-        if (uart_read_bytes(UART_NUM_2, &byte, 1, pdMS_TO_TICKS(5)) == 1) {
+        if (uart_read_bytes(UART_NUM_2, &byte, 1, pdMS_TO_TICKS(10)) == 1) {
             if (resp_len < sizeof(resp) - 1) {
                 resp[resp_len++] = (char)byte;
                 resp[resp_len]   = '\0';
@@ -317,6 +331,46 @@ static bool mqtt_conectado(void)
  * ================================================================ */
 
 /**
+ * @brief Aguarda o boot completo do A7670SA após um reset inesperado.
+ * @details Lê o UART até encontrar "+CPIN: READY" (SIM pronto) ou timeout.
+ *          Chamada quando echo retorna no meio de uma sessão — indica que o
+ *          módulo reiniciou por brownout durante a busca de torre 4G.
+ * @param timeout_ms Tempo máximo de espera em ms.
+ */
+static void aguardar_boot_modem(uint32_t timeout_ms)
+{
+    ESP_LOGW(TAG, "[MODEM] Reset detectado. Aguardando +CPIN: READY (max %lu s)...",
+             (unsigned long)(timeout_ms / 1000));
+
+    char   buf[128] = {0};
+    size_t len      = 0;
+    uint32_t t0     = agora_ms();
+
+    while (agora_ms() - t0 < timeout_ms) {
+        uint8_t byte;
+        if (uart_read_bytes(UART_NUM_2, &byte, 1, pdMS_TO_TICKS(10)) == 1) {
+            if (len < sizeof(buf) - 1) {
+                buf[len++] = (char)byte;
+                buf[len]   = '\0';
+            } else {
+                /* Janela deslizante: descarta metade ao encher (64 bytes restantes) */
+                memmove(buf, buf + 64, 64);
+                buf[64] = '\0';
+                len = 64;
+            }
+            if (strstr(buf, "+CPIN: READY")) {
+                ESP_LOGI(TAG, "[MODEM] +CPIN: READY recebido. Aguardando 3 s...");
+                vTaskDelay(pdMS_TO_TICKS(3000));
+                return;
+            }
+        }
+    }
+    /* Timeout — continua mesmo assim; ATE0 vai confirmar se está pronto */
+    ESP_LOGW(TAG, "[MODEM] Timeout aguardando +CPIN: READY. Continuando.");
+    vTaskDelay(pdMS_TO_TICKS(2000));
+}
+
+/**
  * @brief Executa o estado CONECTANDO_REDE: verifica modem, registra na rede
  *        celular, configura APN, ativa contexto PDP e inicializa GNSS.
  * @return true se rede e GNSS prontos; false em falha irrecuperável.
@@ -337,18 +391,46 @@ static bool conectar_rede(void)
     /* Desabilitar eco para não poluir respostas de comandos posteriores */
     enviar_at("ATE0", "OK", 2000, nullptr, 0);
 
-    /* ── Aguardar registro na rede (até ~60 s) ── */
+    /* ── Aguardar registro na rede (até ~3 min, com recuperação de resets) ── */
     bool registrado = false;
-    for (int i = 0; i < 30; i++) {
-        enviar_at("AT+CREG?", "+CREG:", POSE_AT_TMO_MS, s_buf_at, sizeof(s_buf_at));
+    for (int i = 0; i < 45; i++) {
+        /* Espera "OK" completo — garante que o status após "+CREG:" está no buffer. */
+        enviar_at("AT+CREG?", "OK", POSE_AT_TMO_MS, s_buf_at, sizeof(s_buf_at));
+        ESP_LOGI(TAG, "[REDE] CREG(%d/45): %s", i + 1, s_buf_at);
+
         if (strstr(s_buf_at, "+CREG: 0,1") || strstr(s_buf_at, "+CREG: 0,5")) {
             registrado = true;
             ESP_LOGI(TAG, "[REDE] Registrado na rede.");
             break;
         }
-        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        /* Detecta reset do modem: eco retorna quando o módulo reinicia por brownout.
+         * Também detecta a sequência de boot "*ATREADY:" no buffer capturado. */
+        bool modem_resetou = strstr(s_buf_at, "AT+CREG?") != nullptr ||
+                             strstr(s_buf_at, "*ATREADY:")  != nullptr;
+        if (modem_resetou) {
+            /* Verifica se +CPIN: READY já está no buffer atual (boot já concluiu) */
+            if (!strstr(s_buf_at, "+CPIN: READY")) {
+                aguardar_boot_modem(20000);  /* 20 s para o boot completar */
+            } else {
+                ESP_LOGI(TAG, "[MODEM] Boot ja concluido (CPIN no buffer). Aguardando 3 s...");
+                vTaskDelay(pdMS_TO_TICKS(3000));
+            }
+            /* Reinicia comunicação AT após o boot */
+            enviar_at("ATE0", "OK", 5000, nullptr, 0);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;  /* Não conta espera extra — próxima iteração imediatamente */
+        }
+
+        /* Status 0,2 = buscando rede — aguarda mais antes de re-tentar */
+        if (strstr(s_buf_at, "+CREG: 0,2")) {
+            ESP_LOGI(TAG, "[REDE] Buscando rede... aguardando 5 s.");
+            vTaskDelay(pdMS_TO_TICKS(5000));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
     }
-    if (!registrado) { ESP_LOGE(TAG, "[REDE] Sem registro após 60 s."); return false; }
+    if (!registrado) { ESP_LOGE(TAG, "[REDE] Sem registro após ~3 min."); return false; }
 
     /* ── Configurar APN ── */
     {
@@ -378,6 +460,14 @@ static bool conectar_rede(void)
         ESP_LOGI(TAG, "[GNSS] Módulo GNSS pronto.");
     } else {
         ESP_LOGW(TAG, "[GNSS] '+CGNSSPWR: READY!' não detectado. Continuando.");
+    }
+
+    /* Confirma modo GNSS ativo — útil para diagnóstico em campo.
+     * Módulo SA (foreign): modo 3 = GPS+GLONASS+GALILEO+SBAS+QZSS (ideal para Brasil). */
+    if (enviar_at("AT+CGNSSMODE?", "+CGNSSMODE:", 3000, s_buf_at, sizeof(s_buf_at))) {
+        ESP_LOGI(TAG, "[GNSS] Modo ativo: %s", s_buf_at);
+    } else {
+        ESP_LOGW(TAG, "[GNSS] Nao foi possivel consultar modo GNSS.");
     }
 
     return true;
@@ -456,6 +546,8 @@ static bool ler_gnss_info(char *saida, size_t max_len)
 {
     if (!enviar_at("AT+CGNSSINFO", "+CGNSSINFO:", POSE_AT_TMO_MS,
                    s_buf_at, sizeof(s_buf_at))) {
+        /* Modem não respondeu ou retornou ERROR — módulo GNSS pode não estar pronto */
+        ESP_LOGW(TAG, "[GNSS] AT+CGNSSINFO sem resposta/erro. Buf='%.80s'", s_buf_at);
         strncpy(saida, "gnss_err", max_len - 1);
         saida[max_len - 1] = '\0';
         return false;
@@ -640,6 +732,14 @@ static void pose_task(void *pvParameters)
 {
     (void)pvParameters;
 
+    /* Aguarda o A7670SA passar o pico de corrente de registro na rede celular.
+     * O modem puxa ~1-2 A durante os primeiros 8-12 s após power-on, o que
+     * pode derrubar o rail 3.3V do ESP32 a ponto de causar reset de hardware.
+     * Este delay deixa o pico passar antes de qualquer comunicação AT. */
+    ESP_LOGI(TAG, "[MODEM] Aguardando estabilizacao do A7670SA (12 s)...");
+    vTaskDelay(pdMS_TO_TICKS(12000));
+    ESP_LOGI(TAG, "[MODEM] Iniciando comunicacao AT.");
+
     fsm_estado_t estado          = FSM_CONECTANDO_REDE;
     uint32_t     ultima_telemetria = 0;
 
@@ -650,6 +750,15 @@ static void pose_task(void *pvParameters)
             case FSM_CONECTANDO_REDE:
                 ESP_LOGI(TAG, "[FSM] ▶ CONECTANDO_REDE");
                 if (conectar_rede()) {
+                    /* ── A-GPS: baixar efemérides via LTE ──────────────
+                     * Reduz cold start GNSS de ~60-90 s para ~3-5 s.
+                     * Executado uma vez por conexão. Falha não é fatal. */
+                    ESP_LOGI(TAG, "[GNSS] Baixando efemérides A-GPS via LTE...");
+                    if (enviar_at("AT+CAGPS", "+AGPS: success", 15000, nullptr, 0)) {
+                        ESP_LOGI(TAG, "[GNSS] A-GPS OK — fix GPS rapido garantido.");
+                    } else {
+                        ESP_LOGW(TAG, "[GNSS] A-GPS falhou — fix normal ~60 s.");
+                    }
                     ESP_LOGI(TAG, "[FSM] ✓ Rede pronta → CONECTANDO_MQTT");
                     estado = FSM_CONECTANDO_MQTT;
                 } else {
@@ -666,6 +775,7 @@ static void pose_task(void *pvParameters)
 
                 if (conectar_mqtt()) {
                     ESP_LOGI(TAG, "[FSM] ✓ MQTT pronto → OPERANDO");
+                    g_mqtt_operando = true;
                     estado = FSM_OPERANDO;
                     /* Agenda primeiro envio imediatamente */
                     ultima_telemetria = agora_ms() - POSE_TELEMETRIA_MS;
@@ -691,6 +801,7 @@ static void pose_task(void *pvParameters)
                 if (s_cont_erros_mqtt >= POSE_MAX_ERROS_MQTT) {
                     if (!mqtt_conectado()) {
                         ESP_LOGE(TAG, "[FSM] MQTT desconectado → CONECTANDO_MQTT");
+                        g_mqtt_operando = false;
                         estado = FSM_CONECTANDO_MQTT;
                         break;
                     }
@@ -710,7 +821,8 @@ static void pose_task(void *pvParameters)
                     ESP_LOGI(TAG, "[GNSS] Fix: %s", s_buf_gnss);
                     pose_update_gnss(s_buf_gnss);
                 } else {
-                    ESP_LOGD(TAG, "[GNSS] Sem fix.");
+                    /* LOGI (não LOGD) para que fique visível no monitor serial */
+                    ESP_LOGI(TAG, "[GNSS] Sem fix. Raw='%s'", s_buf_gnss);
                 }
 
                 /* Heading do magnetômetro — chamada direta é thread-safe no driver I2C */
@@ -757,6 +869,62 @@ static float ddmm_para_graus(const char *ddmm, char hemisferio)
     float resultado = (float)graus + minutos / 60.0f;
     if (hemisferio == 'S' || hemisferio == 'W') resultado = -resultado;
     return resultado;
+}
+
+/* ================================================================
+ * Dead reckoning — propagação de pose entre fixes GNSS
+ * ================================================================ */
+
+/**
+ * @brief Estima velocidade linear do veículo a partir dos últimos PWMs comandados.
+ * @details v_norm = ((pwm_esq − 1520) + (pwm_dir − 1520)) / (2 × 480)
+ *          A média dos desvios dos dois motores é a componente de avanço líquido.
+ *          Ignora slip, corrente e resistência da água — calibrar V_MAX_MS em campo.
+ * @return Velocidade linear estimada em m/s.
+ */
+static float calcular_v_dos_pwms(void)
+{
+    int   pwm_esq = motor_get_last_pwm_left();
+    int   pwm_dir = motor_get_last_pwm_right();
+    float v_norm  = ((float)(pwm_esq - MOTOR_PONTO_MORTO_US) +
+                     (float)(pwm_dir - MOTOR_PONTO_MORTO_US)) /
+                    (2.0f * (float)MOTOR_DELTA_MAX_US);
+    return v_norm * V_MAX_MS;
+}
+
+/**
+ * @brief Propaga x e y da pose via integração Euler com θ do cache da pose.
+ * @details θ é lido de g_pose.theta, que a heading_task mantém atualizado a 10 Hz
+ *          via pose_update_heading(). Isso evita qualquer chamada I2C bloqueante
+ *          dentro do callback do esp_timer (stack de apenas 4 KB na task do timer).
+ *          O GNSS corrige x e y a ~1 Hz sobrescrevendo sem suavização.
+ *          Thread-safe — toda a leitura e escrita ocorre dentro do mesmo mutex.
+ * @param v_linear Velocidade linear em m/s (de calcular_v_dos_pwms).
+ * @param dt_s     Período de integração em segundos (0.1 s a 10 Hz).
+ */
+static void pose_dead_reckon(float v_linear, float dt_s)
+{
+    if (xSemaphoreTake(g_pose_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        /* θ já atualizado pela heading_task via pose_update_heading() — sem I2C aqui */
+        float theta = g_pose.theta;
+        g_pose.x += v_linear * cosf(theta) * dt_s;
+        g_pose.y += v_linear * sinf(theta) * dt_s;
+        xSemaphoreGive(g_pose_mutex);
+    }
+}
+
+/**
+ * @brief Callback do timer periódico de dead reckoning (10 Hz).
+ * @details Executado pelo esp_timer a cada 100 ms. Estima v dos PWMs atuais
+ *          e propaga a pose. A correção GNSS é aplicada assincronamente em
+ *          pose_update_gnss() ao chegar cada fix (~1 Hz).
+ * @param arg Não utilizado.
+ */
+static void pose_dr_cb(void *arg)
+{
+    (void)arg;
+    float v_est = calcular_v_dos_pwms();
+    pose_dead_reckon(v_est, 0.1f);
 }
 
 /* ================================================================
@@ -807,13 +975,41 @@ esp_err_t pose_init(void)
     }
 
     /* ----------------------------------------------------------------
-     * Stack de 8 KB para acomodar buffers de AT na pilha das funções
-     * internas (s_buf_at, resp[512] em enviar_at, etc.).
+     * Timer periódico de dead reckoning a 10 Hz (100 ms = 100 000 µs).
+     * Propaga x e y com heading do magnetômetro entre fixes GNSS (~1 Hz).
+     * Criado antes da pose_task para que o predictor já esteja ativo
+     * quando a FSM entrar em OPERANDO e o primeiro fix GNSS chegar.
+     * ---------------------------------------------------------------- */
+    {
+        esp_timer_create_args_t dr_args = {};
+        dr_args.callback        = pose_dr_cb;
+        dr_args.arg             = nullptr;
+        dr_args.dispatch_method = ESP_TIMER_TASK;
+        dr_args.name            = "pose_dr";
+
+        ret = esp_timer_create(&dr_args, &g_dr_timer);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Falha ao criar timer DR: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        ret = esp_timer_start_periodic(g_dr_timer, 100000);  /* 100 ms em µs */
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Falha ao iniciar timer DR: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        ESP_LOGI(TAG, "Timer de dead reckoning iniciado (10 Hz).");
+    }
+
+    /* ----------------------------------------------------------------
+     * Stack de 12 KB: 8 KB originais + 4 KB de margem para coexistência
+     * com WiFi (esp_timer task de alta prioridade + lwIP TCP/IP stack).
+     * Sem essa margem, o ESP32 reinicia por stack overflow quando todas
+     * as tasks estão ativas simultaneamente.
      * ---------------------------------------------------------------- */
     BaseType_t task_ret = xTaskCreate(
         pose_task,
         "pose_task",
-        8192,
+        12288,
         nullptr,
         4,
         nullptr
@@ -903,14 +1099,21 @@ bool pose_update_gnss(const char *cgnssinfo_str)
     float x_novo = delta_lon * cosf(lat0_rad) * 6371000.0f;
     float y_novo = delta_lat * 6371000.0f;
 
+    float dr_err = 0.0f;
     if (xSemaphoreTake(g_pose_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        g_pose.x           = x_novo;
-        g_pose.y           = y_novo;
-        g_pose.gnss_valid  = true;
+        /* Distância entre estimativa DR acumulada e fix GNSS — qualidade do predictor */
+        float ex    = x_novo - g_pose.x;
+        float ey    = y_novo - g_pose.y;
+        dr_err      = sqrtf(ex * ex + ey * ey);
+
+        g_pose.x            = x_novo;
+        g_pose.y            = y_novo;
+        g_pose.gnss_valid   = true;
         g_pose.last_gnss_ms = agora_ms();
         xSemaphoreGive(g_pose_mutex);
     }
 
+    ESP_LOGI(TAG, "Fix corrigido: x=%.2f y=%.2f err_dr=%.2f m", x_novo, y_novo, dr_err);
     ESP_LOGD(TAG, "Pose GNSS: x=%.2f m y=%.2f m (lat=%.7f lon=%.7f)",
              x_novo, y_novo, lat_deg, lon_deg);
 
@@ -938,4 +1141,9 @@ hdrop_pose_t pose_get(void)
     }
 
     return copia;
+}
+
+bool pose_mqtt_connected(void)
+{
+    return g_mqtt_operando;
 }

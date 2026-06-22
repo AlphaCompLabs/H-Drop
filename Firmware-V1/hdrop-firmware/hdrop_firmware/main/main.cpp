@@ -1,169 +1,233 @@
 /**
  * @file main.cpp
- * @brief Ponto de entrada do firmware H-DROP — Etapa 3 (modo bancada).
- * @details Inicializa motor, heading e pose. Em bancada, executa validação
- *          das funções de parsing GNSS com strings sintéticas calculadas
- *          (ver simulations.md). A pose_task roda em background tentando
- *          conectar ao A7670SA — inofensivo sem o modem, apenas logará
- *          timeouts AT até que o hardware seja conectado.
+ * @brief Firmware de campo H-DROP — sequência segura de boot e teste de manobra.
  *
- * @depends hdrop_motor, hdrop_heading, hdrop_pose
+ * Sequência completa:
+ *   [BOOT]        WiFi AP + ESC arming + magnetômetro (calibração da NVS)
+ *   [AGUARDANDO]  Motores em neutro — espera MQTT + fix GNSS
+ *   [PRONTO]      Heading hold ativo → aponta para norte magnético
+ *   [TESTE]       Validação de heading e coordenadas GPS
+ *   [MANOBRA]     Softstart → avança 5 s a 50% → para
+ *   [OPERANDO]    Heading hold retoma, monitoramento contínuo
  */
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "hdrop_motor.h"
 #include "hdrop_heading.h"
 #include "hdrop_pose.h"
+#include "hdrop_ota.h"
 #include <cmath>
 
-/** Tag de log do módulo principal. */
 static const char *TAG = "MAIN";
 
-/* ================================================================
- * [SIMULAÇÃO] Strings GNSS sintéticas para teste de bancada.
- * Calculadas para referência (15°47'S, 47°20'W) — Brasília/DF.
- * Ver simulations.md — Simulação 3 para reverter em campo.
- * ================================================================ */
+/* ── Parâmetros da manobra ──────────────────────────────────────── */
+/** Potência de avanço: 50% de (2000 - 1520 µs) = 240 µs acima do ponto morto. */
+#define MANOBRA_POTENCIA      0.5f
+/** Duração do avanço em segundos. */
+#define MANOBRA_DURACAO_S     5
+/** Duração do softstart em passos de 100 ms (20 × 100 ms = 2 s). */
+#define SOFTSTART_PASSOS      20
+/** Timeout máximo aguardando MQTT + GNSS (5 minutos). */
+#define TIMEOUT_PRONTO_MS     (5 * 60 * 1000)
 
-/** Fix de referência (mode=2, lat=15°47'S, lon=47°20'W). */
-static const char *GNSS_FIX_REF =
-    "2,09,05,00,1547.000000,S,04720.000000,W,200626,120000.0,1050.0,0.0,0.0,1.2,0.9,0.8";
-
-/** Fix 100 m ao norte da referência (mode=3). y esperado = 100.0000 m. */
-static const char *GNSS_FIX_100M_N =
-    "3,09,05,00,1546.946041,S,04720.000000,W,200626,120001.0,1050.0,0.0,0.0,1.2,0.9,0.8";
-
-/** Fix 100 m ao leste da referência (mode=3). x esperado = 100.0000 m. */
-static const char *GNSS_FIX_100M_E =
-    "3,09,05,00,1547.000000,S,04719.943927,W,200626,120002.0,1050.0,0.0,0.0,1.2,0.9,0.8";
-
-/**
- * @brief Executa teste de bancada dos critérios de aceitação da Etapa 3.
- * @details Valida sem A7670SA:
- *          1. pose_update_gnss() retorna true para mode="2" e mode="3"
- *          2. Distância euclidiana entre dois fixes conhecidos (erro < 5 m)
- *          3. String sem fix retorna false
- */
-static void executar_teste_bancada_pose(void)
+static const char *reset_reason_str(esp_reset_reason_t r)
 {
-    ESP_LOGI(TAG, "--- [BANCADA] Início dos testes de parsing GNSS ---");
+    switch (r) {
+        case ESP_RST_POWERON:   return "POWER_ON";
+        case ESP_RST_PANIC:     return "PANIC";
+        case ESP_RST_INT_WDT:   return "INT_WATCHDOG";
+        case ESP_RST_TASK_WDT:  return "TASK_WATCHDOG";
+        case ESP_RST_BROWNOUT:  return "BROWNOUT";
+        case ESP_RST_SW:        return "SW_RESET";
+        default:                return "OUTRO";
+    }
+}
 
-    /* ── Critério 1a: mode="2" retorna true; define ponto de referência ── */
-    bool ok_ref = pose_update_gnss(GNSS_FIX_REF);
-    hdrop_pose_t p_ref = pose_get();
-    ESP_LOGI(TAG, "[T1] Fix referência (mode=2): retornou=%s | x=%.4f m y=%.4f m",
-             ok_ref ? "true ✓" : "false ✗", p_ref.x, p_ref.y);
-
-    /* ── Critério 1b: mode="3" retorna true; y ≈ 100 m ── */
-    bool ok_n = pose_update_gnss(GNSS_FIX_100M_N);
-    hdrop_pose_t p_n = pose_get();
-    float dist_n = sqrtf(p_n.x * p_n.x + p_n.y * p_n.y);
-    ESP_LOGI(TAG, "[T2] Fix 100m Norte (mode=3): retornou=%s | x=%.4f m y=%.4f m",
-             ok_n ? "true ✓" : "false ✗", p_n.x, p_n.y);
-    ESP_LOGI(TAG, "     Distância euclidiana: %.4f m | erro: %.4f m | %s",
-             dist_n, fabsf(dist_n - 100.0f),
-             fabsf(dist_n - 100.0f) < 5.0f ? "PASSOU ✓" : "FALHOU ✗");
-
-    /* ── Critério 1c: fix leste — verifica conversão do eixo X ──
-       Aplica a partir da referência, comparando x vs referência (não vs fix N) */
-    pose_update_gnss(GNSS_FIX_REF);  /* reseta para referência */
-    bool ok_e = pose_update_gnss(GNSS_FIX_100M_E);
-    hdrop_pose_t p_e = pose_get();
-    float dist_e = sqrtf(p_e.x * p_e.x + p_e.y * p_e.y);
-    ESP_LOGI(TAG, "[T3] Fix 100m Leste (mode=3): retornou=%s | x=%.4f m y=%.4f m",
-             ok_e ? "true ✓" : "false ✗", p_e.x, p_e.y);
-    ESP_LOGI(TAG, "     Distância euclidiana: %.4f m | erro: %.4f m | %s",
-             dist_e, fabsf(dist_e - 100.0f),
-             fabsf(dist_e - 100.0f) < 5.0f ? "PASSOU ✓" : "FALHOU ✗");
-
-    /* ── Critério negativo: string sem fix deve retornar false ── */
-    bool ok_nofix = pose_update_gnss(",,,,,,,,,,,,,,,");
-    ESP_LOGI(TAG, "[T4] Sem fix (mode vazio): retornou=%s | esperado: false %s",
-             ok_nofix ? "true" : "false", !ok_nofix ? "✓" : "✗");
-
-    ESP_LOGI(TAG, "--- [BANCADA] Fim dos testes de parsing GNSS ---");
+/* Softstart: rampa de 0 até `v_alvo` em SOFTSTART_PASSOS × 100 ms. */
+static void softstart(float v_alvo)
+{
+    ESP_LOGI(TAG, "[MANOBRA] Softstart → %.0f%% em %d s...",
+             v_alvo * 100.0f, SOFTSTART_PASSOS / 10);
+    for (int i = 1; i <= SOFTSTART_PASSOS; i++) {
+        float v = v_alvo * ((float)i / (float)SOFTSTART_PASSOS);
+        motor_set_speeds(v, v);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 }
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "=== H-DROP Firmware — Etapa 3 (bancada) ===");
+    ESP_LOGW(TAG, ">>> Reset anterior: %s <<<", reset_reason_str(esp_reset_reason()));
+    ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   H-DROP ASV — Firmware de campo     ║");
+    ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
 
-    /* ----------------------------------------------------------------
-     * 1. Motores — arming de 4 s.
-     * ---------------------------------------------------------------- */
-    esp_err_t ret = motor_init();
+    /* ── [BOOT 0] WiFi OTA — sobe em background ───────────────────── */
+    esp_err_t ret = ota_init();
+    if (ret != ESP_OK)
+        ESP_LOGW(TAG, "OTA sem WiFi (%s).", esp_err_to_name(ret));
+
+    /* ── [BOOT 1] Motores — arming 4 s, neutro garantido ─────────── */
+    ret = motor_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Falha na inicialização dos motores: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "FATAL: motor_init falhou. Abortando.");
         return;
     }
 
-    /* ----------------------------------------------------------------
-     * 2. Heading — I2C, QMC5883L e heading_task 10 Hz.
-     * ---------------------------------------------------------------- */
+    /* ── [BOOT 2] Magnetômetro — carrega calibração da NVS ─────────
+     *    Calibração já está gravada. heading_calibrate() não é chamado.  */
     ret = heading_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Falha na inicialização do heading: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "FATAL: heading_init falhou. Abortando.");
         return;
     }
 
-    /* ----------------------------------------------------------------
-     * 3. Pose — UART2 e pose_task com FSM MQTT.
-     *    Em bancada: UART2 inicializa; pose_task fará loop de timeout AT
-     *    até o A7670SA ser conectado. O teste abaixo não depende da task.
-     * ---------------------------------------------------------------- */
+    /* ── [BOOT 3] Pose/Modem — FSM aguarda 12 s internamente ───────
+     *    Deixa o A7670SA passar o pico de corrente de boot antes de AT. */
     ret = pose_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Falha na inicialização da pose: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "FATAL: pose_init falhou. Abortando.");
         return;
     }
 
-    /* ----------------------------------------------------------------
-     * [SIMULAÇÃO] Teste de bancada — parsing GNSS com strings sintéticas.
-     * Valida critérios de aceitação 1, 2 e 3 da Etapa 3 sem modem.
-     * Ver simulations.md — Simulação 3 para reverter em campo.
-     * ---------------------------------------------------------------- */
-    executar_teste_bancada_pose();
+    ESP_LOGI(TAG, "Boot completo. Motores em neutro. Aguardando MQTT + GNSS...");
 
-    /* ----------------------------------------------------------------
-     * [SIMULAÇÃO] Calibração e heading_hold desabilitados para bancada.
-     * Ver simulations.md — Simulações 1 e 2 para reverter em campo.
-     *
-     * heading_calibrate(100);
-     * heading_hold(0.0f);
-     * ---------------------------------------------------------------- */
+    /* ════════════════════════════════════════════════════════════════
+     * [AGUARDANDO] — motores em neutro, espera MQTT e fix GNSS
+     * ════════════════════════════════════════════════════════════════ */
+    uint32_t t_inicio = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+    bool mqtt_ok  = false;
+    bool gnss_ok  = false;
 
-    /* ----------------------------------------------------------------
-     * Loop de monitoramento: heading a cada 500 ms, pose a cada 2 s.
-     * ---------------------------------------------------------------- */
-    ESP_LOGI(TAG, "Entrando em loop de monitoramento (bancada).");
+    while (!(mqtt_ok && gnss_ok)) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
 
-    float    theta_ant = 0.0f;
-    bool     primeira  = true;
-    uint32_t ciclo     = 0;
-
-    while (true) {
-        motor_set_speeds(0.0f, 0.0f);  /* alimenta watchdog sem acionar ESCs */
+        mqtt_ok = pose_mqtt_connected();
+        hdrop_pose_t p = pose_get();
+        gnss_ok = p.gnss_valid;
 
         float theta = 0.0f;
-        if (heading_read(&theta)) {
-            float variacao = primeira ? 0.0f : fabsf(theta - theta_ant);
-            theta_ant = theta;
-            primeira  = false;
-            ESP_LOGI(TAG, "Heading: %.3f rad (%.1f°) | var: %.4f rad",
-                     theta, theta * 180.0f / 3.14159f, variacao);
+        heading_read(&theta);
+
+        ESP_LOGI(TAG, "[AGUARDANDO] MQTT:%s  GNSS:%s  heading=%.1f°  heap=%lu",
+                 mqtt_ok ? "OK" : "...",
+                 gnss_ok ? "OK" : "...",
+                 theta * 180.0f / (float)M_PI,
+                 (unsigned long)esp_get_free_heap_size());
+
+        if (gnss_ok)
+            ESP_LOGI(TAG, "[AGUARDANDO] Pos: x=%.2f m  y=%.2f m", p.x, p.y);
+
+        /* Timeout de segurança */
+        uint32_t decorrido = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS) - t_inicio;
+        if (decorrido > TIMEOUT_PRONTO_MS) {
+            ESP_LOGW(TAG, "Timeout aguardando prontidão (%s %s). Prosseguindo assim mesmo.",
+                     mqtt_ok ? "MQTT:OK" : "MQTT:FAIL",
+                     gnss_ok ? "GNSS:OK" : "GNSS:FAIL");
+            break;
+        }
+    }
+
+    /* ════════════════════════════════════════════════════════════════
+     * [PRONTO] — ASV pronto para operação
+     * ════════════════════════════════════════════════════════════════ */
+    ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   ASV PRONTO PARA OPERAÇÃO           ║");
+    ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
+
+    /* Ativa heading hold — aponta para norte magnético */
+    heading_hold(0.0f);
+    ESP_LOGI(TAG, "[PRONTO] Heading hold ativo → norte magnético (0°).");
+    ESP_LOGI(TAG, "[PRONTO] Aguardando 5 s para estabilizar orientação...");
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    /* ════════════════════════════════════════════════════════════════
+     * [TESTE] — validação de heading e GPS
+     * ════════════════════════════════════════════════════════════════ */
+    {
+        float theta = 0.0f;
+        heading_read(&theta);
+        hdrop_pose_t p = pose_get();
+
+        ESP_LOGI(TAG, "── TESTE DE HEADING ─────────────────────");
+        ESP_LOGI(TAG, "   Heading atual:  %.3f rad  (%.1f°)", theta, theta * 180.0f / (float)M_PI);
+        ESP_LOGI(TAG, "   Alvo:           0.000 rad  (0.0° — norte)");
+        ESP_LOGI(TAG, "   Erro:           %.1f°", (theta * 180.0f / (float)M_PI));
+
+        ESP_LOGI(TAG, "── TESTE DE LOCALIZAÇÃO GPS ─────────────");
+        if (p.gnss_valid) {
+            ESP_LOGI(TAG, "   Fix GNSS: VÁLIDO");
+            ESP_LOGI(TAG, "   x = %.4f m  (leste/oeste do ponto de origem)", p.x);
+            ESP_LOGI(TAG, "   y = %.4f m  (norte/sul do ponto de origem)", p.y);
         } else {
-            ESP_LOGE(TAG, "Falha I2C — verificar cabeamento SDA/SCL.");
+            ESP_LOGW(TAG, "   Fix GNSS: AGUARDANDO SATÉLITES");
         }
+        ESP_LOGI(TAG, "─────────────────────────────────────────");
+    }
 
-        /* Loga pose a cada ~2 s (4 ciclos de 500 ms) */
-        if (++ciclo % 4 == 0) {
-            hdrop_pose_t p = pose_get();
-            ESP_LOGI(TAG, "Pose: x=%.2f m y=%.2f m theta=%.3f rad fix=%d",
-                     p.x, p.y, p.theta, p.gnss_valid ? 1 : 0);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    /* ════════════════════════════════════════════════════════════════
+     * [MANOBRA] — avança 5 s a 50% de potência
+     * ════════════════════════════════════════════════════════════════ */
+    ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   MANOBRA: AVANÇO 5 s @ 50%%          ║");
+    ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
+    ESP_LOGI(TAG, "[MANOBRA] PWM alvo: %d µs  (ponto morto=%d + %d µs)",
+             (int)(MOTOR_PONTO_MORTO_US + MANOBRA_POTENCIA * MOTOR_DELTA_MAX_US),
+             MOTOR_PONTO_MORTO_US,
+             (int)(MANOBRA_POTENCIA * MOTOR_DELTA_MAX_US));
+
+    /* Desativa heading hold — motores ficam livres para avançar reto */
+    heading_hold(-1.0f);
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    /* Softstart: 2 s de rampa até 50% */
+    softstart(MANOBRA_POTENCIA);
+
+    /* Avanço a 50% por 5 s */
+    ESP_LOGI(TAG, "[MANOBRA] Avançando %d s @ %.0f%%...", MANOBRA_DURACAO_S, MANOBRA_POTENCIA * 100.0f);
+    for (int i = 0; i < MANOBRA_DURACAO_S * 10; i++) {
+        motor_set_speeds(MANOBRA_POTENCIA, MANOBRA_POTENCIA);
+        if (i % 10 == 0) {
+            float theta = 0.0f;
+            heading_read(&theta);
+            ESP_LOGI(TAG, "[MANOBRA] t=%ds | PWM=%dµs | heading=%.1f°",
+                     i / 10,
+                     motor_get_last_pwm_left(),
+                     theta * 180.0f / (float)M_PI);
         }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 
-        vTaskDelay(pdMS_TO_TICKS(500));
+    /* Para os motores */
+    motor_stop();
+    ESP_LOGI(TAG, "[MANOBRA] PARADO.");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    /* ════════════════════════════════════════════════════════════════
+     * [OPERANDO] — retoma heading hold e monitoramento contínuo
+     * ════════════════════════════════════════════════════════════════ */
+    heading_hold(0.0f);
+    ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   MANOBRA CONCLUÍDA — EM OPERAÇÃO    ║");
+    ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
+
+    while (true) {
+        float theta = 0.0f;
+        heading_read(&theta);
+        hdrop_pose_t p = pose_get();
+
+        ESP_LOGI(TAG, "heading=%.1f° | x=%.2fm y=%.2fm | fix=%s | mqtt=%s | heap=%lu",
+                 theta * 180.0f / (float)M_PI,
+                 p.x, p.y,
+                 p.gnss_valid        ? "OK" : "--",
+                 pose_mqtt_connected() ? "OK" : "--",
+                 (unsigned long)esp_get_free_heap_size());
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

@@ -1,0 +1,11 @@
+# Tabela de partições com suporte a OTA — Flash 4 MB
+# Duas partições de app (ota_0 / ota_1) de ~1,9 MB cada.
+# O bootloader alterna automaticamente entre elas a cada OTA bem-sucedida.
+# Primeiro flash: idf.py flash → grava em ota_0 e inicializa otadata.
+#
+# Name,     Type, SubType,  Offset,   Size
+nvs,        data, nvs,      0x9000,   0x4000
+otadata,    data, ota,      0xd000,   0x2000
+phy_init,   data, phy,      0xf000,   0x1000
+ota_0,      app,  ota_0,    0x10000,  0x1F0000
+ota_1,      app,  ota_1,    0x200000, 0x1F0000

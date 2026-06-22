@@ -60,8 +60,9 @@ extern "C" {
 
 /** Período do watchdog de segurança em milissegundos.
  *  Ambos os motores são parados automaticamente se motor_set_speeds()
- *  não for chamada dentro deste intervalo. */
-#define MOTOR_WATCHDOG_MS         2000
+ *  não for chamada dentro deste intervalo.
+ *  5 s cobre a calibração hard-iron (~2 s) + margem para delay de scheduler. */
+#define MOTOR_WATCHDOG_MS         5000
 
 /* ================================================================
  * API pública

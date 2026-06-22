@@ -100,6 +100,12 @@ void pose_update_heading(float theta_rad);
  */
 hdrop_pose_t pose_get(void);
 
+/**
+ * @brief Retorna true se o FSM de pose está em estado OPERANDO (MQTT conectado).
+ * @details Útil para aguardar prontidão antes de iniciar manobras.
+ */
+bool pose_mqtt_connected(void);
+
 #ifdef __cplusplus
 }
 #endif
