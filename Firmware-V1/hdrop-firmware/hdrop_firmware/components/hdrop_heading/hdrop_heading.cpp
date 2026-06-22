@@ -22,6 +22,7 @@
 #include "hdrop_motor.h"
 
 #include "driver/i2c.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -70,6 +71,45 @@ static volatile bool g_hold_enabled = false;
  * @param value Valor a escrever.
  * @return ESP_OK em sucesso, ou código de erro ESP-IDF em falha de barramento.
  */
+/**
+ * @brief Recupera o barramento I2C caso um slave esteja travado segurando SDA baixo.
+ * @details Ocorre quando o ESP32 reseta no meio de uma transação I2C (ex: brownout).
+ *          O slave fica esperando mais clocks para completar o byte em curso.
+ *          Solução: pulsar SCL 9 vezes como GPIO puro para liberar o slave,
+ *          depois enviar condição de STOP. Conforme I2C spec §3.1.16.
+ */
+static void i2c_bus_recovery(void)
+{
+    /* Configura SDA e SCL como saída open-drain com pull-up — sem o driver I2C */
+    gpio_config_t io = {};
+    io.pin_bit_mask  = (1ULL << HEADING_PINO_SDA) | (1ULL << HEADING_PINO_SCL);
+    io.mode          = GPIO_MODE_OUTPUT_OD;
+    io.pull_up_en    = GPIO_PULLUP_ENABLE;
+    gpio_config(&io);
+
+    gpio_set_level((gpio_num_t)HEADING_PINO_SDA, 1);
+    gpio_set_level((gpio_num_t)HEADING_PINO_SCL, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    /* 9 pulsos de clock — libera qualquer slave travado no meio de um byte */
+    for (int i = 0; i < 9; i++) {
+        gpio_set_level((gpio_num_t)HEADING_PINO_SCL, 0);
+        vTaskDelay(pdMS_TO_TICKS(1));
+        gpio_set_level((gpio_num_t)HEADING_PINO_SCL, 1);
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    /* Condição de STOP: SDA sobe enquanto SCL está alto */
+    gpio_set_level((gpio_num_t)HEADING_PINO_SDA, 0);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    gpio_set_level((gpio_num_t)HEADING_PINO_SCL, 1);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    gpio_set_level((gpio_num_t)HEADING_PINO_SDA, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    ESP_LOGW(TAG, "[I2C] Bus recovery concluida (9 pulsos SCL).");
+}
+
 static esp_err_t write_reg(uint8_t reg, uint8_t value)
 {
     uint8_t buf[2] = {reg, value};
@@ -271,6 +311,10 @@ esp_err_t heading_init(void)
     i2c_cfg.sda_pullup_en    = GPIO_PULLUP_ENABLE;
     i2c_cfg.scl_pullup_en    = GPIO_PULLUP_ENABLE;
     i2c_cfg.master.clk_speed = HEADING_I2C_FREQ_HZ;
+
+    /* Recupera o barramento antes de instalar o driver — libera SDA caso o
+     * QMC5883L tenha ficado travado por um reset/brownout no meio de uma leitura. */
+    i2c_bus_recovery();
 
     ret = i2c_param_config(I2C_NUM_0, &i2c_cfg);
     if (ret != ESP_OK) {
