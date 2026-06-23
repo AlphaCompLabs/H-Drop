@@ -175,6 +175,43 @@ static esp_err_t qmc_init(void)
     return ESP_OK;
 }
 
+/* ================================================================
+ * INA226 — monitor de tensão da bateria
+ * ================================================================ */
+
+static bool s_ina226_ok = false;
+
+static void ina226_init(void)
+{
+    /* Config: 16 médias, 1.1 ms/conversão, modo contínuo shunt+bus
+     * Registro 0x00 = 0x4527:
+     *   [11:9] AVG=010 (16 amostras), [8:6]=100, [5:3]=100, [2:0]=111 */
+    uint8_t cfg[3] = { INA226_REG_CONFIG, 0x45, 0x27 };
+    esp_err_t ret = i2c_master_write_to_device(
+        I2C_NUM_0, INA226_ADDR, cfg, sizeof(cfg), pdMS_TO_TICKS(200));
+    if (ret == ESP_OK) {
+        s_ina226_ok = true;
+        ESP_LOGI(TAG, "[INA226] Monitor de bateria inicializado (endereco 0x40).");
+    } else {
+        ESP_LOGW(TAG, "[INA226] Nao encontrado — monitoramento de bateria desabilitado.");
+    }
+}
+
+int32_t heading_battery_mv(void)
+{
+    if (!s_ina226_ok) return -1;
+
+    uint8_t reg = INA226_REG_BUS_VOLTAGE;
+    uint8_t data[2] = {};
+    esp_err_t ret = i2c_master_write_read_device(
+        I2C_NUM_0, INA226_ADDR, &reg, 1, data, 2, pdMS_TO_TICKS(100));
+    if (ret != ESP_OK) return -1;
+
+    uint16_t raw = ((uint16_t)data[0] << 8) | data[1];
+    /* LSB = 1.25 mV → multiplicar por 5 e dividir por 4 para evitar float */
+    return (int32_t)raw * 5 / 4;
+}
+
 /**
  * @brief Carrega coeficientes de calibração hard-iron da NVS.
  * @details Em caso de ausência das chaves (primeiro boot), mantém g_cal zerado
@@ -343,6 +380,9 @@ esp_err_t heading_init(void)
         ESP_LOGE(TAG, "QMC5883L nao respondeu apos 3 tentativas. Verifique VCC e fiacao.");
         return ret;
     }
+
+    /* Inicializa INA226 no mesmo barramento I2C (não falha se ausente) */
+    ina226_init();
 
     /* Carrega calibração da NVS (silencioso se ausente — usa zeros) */
     nvs_handle_t nvs_handle;

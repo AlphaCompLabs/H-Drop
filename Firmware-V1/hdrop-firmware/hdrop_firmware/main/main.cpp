@@ -140,11 +140,23 @@ extern "C" void app_main(void)
         float theta = 0.0f;
         heading_read(&theta);
 
-        ESP_LOGI(TAG, "[AGUARDANDO] MQTT:%s  GNSS:%s  heading=%.1f°  heap=%lu",
-                 mqtt_ok ? "OK" : "...",
-                 gnss_ok ? "OK" : "...",
-                 theta * 180.0f / (float)M_PI,
-                 (unsigned long)esp_get_free_heap_size());
+        int32_t vbat = heading_battery_mv();
+        if (vbat > 0) {
+            const char *estado = vbat < BATERIA_MINIMA_MV ? "BAIXA!" :
+                                 vbat < 12000            ? "ok"     : "OK";
+            ESP_LOGI(TAG, "[AGUARDANDO] MQTT:%s  GNSS:%s  heading=%.1f°  bat=%ldmV(%s)  heap=%lu",
+                     mqtt_ok ? "OK" : "...",
+                     gnss_ok ? "OK" : "...",
+                     theta * 180.0f / (float)M_PI,
+                     vbat, estado,
+                     (unsigned long)esp_get_free_heap_size());
+        } else {
+            ESP_LOGI(TAG, "[AGUARDANDO] MQTT:%s  GNSS:%s  heading=%.1f°  heap=%lu",
+                     mqtt_ok ? "OK" : "...",
+                     gnss_ok ? "OK" : "...",
+                     theta * 180.0f / (float)M_PI,
+                     (unsigned long)esp_get_free_heap_size());
+        }
 
         if (gnss_ok)
             ESP_LOGI(TAG, "[AGUARDANDO] Pos: x=%.2f m  y=%.2f m", p.x, p.y);
@@ -249,11 +261,14 @@ extern "C" void app_main(void)
         heading_read(&theta);
         hdrop_pose_t p = pose_get();
 
-        ESP_LOGI(TAG, "heading=%.1f° | x=%.2fm y=%.2fm | fix=%s | mqtt=%s | heap=%lu",
+        int32_t vbat_op = heading_battery_mv();
+        ESP_LOGI(TAG, "heading=%.1f° | x=%.2fm y=%.2fm | fix=%s | mqtt=%s | bat=%s | heap=%lu",
                  theta * 180.0f / (float)M_PI,
                  p.x, p.y,
-                 p.gnss_valid        ? "OK" : "--",
+                 p.gnss_valid         ? "OK" : "--",
                  pose_mqtt_connected() ? "OK" : "--",
+                 vbat_op > 0 ? (vbat_op < BATERIA_MINIMA_MV ? "BAIXA!" :
+                                vbat_op < 12000             ? "ok"     : "OK") : "--",
                  (unsigned long)esp_get_free_heap_size());
 
         vTaskDelay(pdMS_TO_TICKS(1000));

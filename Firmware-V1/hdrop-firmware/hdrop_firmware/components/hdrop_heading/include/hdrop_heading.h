@@ -72,6 +72,25 @@ extern "C" {
 #define HEADING_V_HOLD_MS         0.0f
 
 /* ================================================================
+ * INA226 — monitor de tensão da bateria (mesmo barramento I2C)
+ * ================================================================ */
+
+/** Endereço I2C do INA226 (A0=GND, A1=GND). */
+#define INA226_ADDR               0x40
+
+/** Registrador de configuração do INA226. */
+#define INA226_REG_CONFIG         0x00
+
+/** Registrador de tensão de barramento (1.25 mV por LSB). */
+#define INA226_REG_BUS_VOLTAGE    0x02
+
+/** Tensão mínima de operação da LiFePO4 4S em mV (4 × 2.8 V). */
+#define BATERIA_MINIMA_MV         11200
+
+/** Tensão de carga completa da LiFePO4 4S em mV (4 × 3.6 V). */
+#define BATERIA_PLENA_MV          14400
+
+/* ================================================================
  * NVS — persistência de calibração
  * ================================================================ */
 
@@ -152,6 +171,15 @@ esp_err_t heading_calibrate(uint16_t n_samples);
  *                   Valores fora do intervalo são normalizados internamente.
  */
 void heading_hold(float target_rad);
+
+/**
+ * @brief Lê a tensão da bateria via INA226 (barramento I2C compartilhado).
+ * @details Lê o registrador de bus voltage do INA226 (1.25 mV por LSB).
+ *          Requer que heading_init() já tenha sido chamado (instala o driver I2C).
+ *          Se o INA226 não estiver conectado, retorna -1.
+ * @return Tensão em mV (ex: 13200 = 13.2 V), ou -1 em falha de comunicação.
+ */
+int32_t heading_battery_mv(void);
 
 #ifdef __cplusplus
 }
