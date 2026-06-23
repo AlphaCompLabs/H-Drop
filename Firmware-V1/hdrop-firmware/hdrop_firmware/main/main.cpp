@@ -85,6 +85,34 @@ extern "C" void app_main(void)
         return;
     }
 
+    /* ── [BOOT 2.5] Validação do magnetômetro ──────────────────────
+     *    Lê 6 amostras em 3 s para confirmar I2C e mostrar heading inicial. */
+    ESP_LOGI(TAG, "──────────────────────────────────────────");
+    ESP_LOGI(TAG, "  TESTE MAGNETÔMETRO (3 s)");
+    ESP_LOGI(TAG, "──────────────────────────────────────────");
+    {
+        int falhas = 0;
+        for (int i = 1; i <= 6; i++) {
+            float theta = 0.0f;
+            if (heading_read(&theta)) {
+                ESP_LOGI(TAG, "  [MAG %d/6] Heading: %.1f graus  OK", i,
+                         theta * 180.0f / (float)M_PI);
+            } else {
+                ESP_LOGE(TAG, "  [MAG %d/6] FALHA I2C", i);
+                falhas++;
+            }
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+        if (falhas == 0) {
+            ESP_LOGI(TAG, "  Magnetômetro: OK");
+        } else if (falhas < 6) {
+            ESP_LOGW(TAG, "  Magnetômetro: %d/6 falhas — conexão instável", falhas);
+        } else {
+            ESP_LOGE(TAG, "  Magnetômetro: SEM RESPOSTA — verifique fiação");
+        }
+    }
+    ESP_LOGI(TAG, "──────────────────────────────────────────");
+
     /* ── [BOOT 3] Pose/Modem — FSM aguarda 12 s internamente ───────
      *    Deixa o A7670SA passar o pico de corrente de boot antes de AT. */
     ret = pose_init();
