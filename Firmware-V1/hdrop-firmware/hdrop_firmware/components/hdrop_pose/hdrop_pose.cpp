@@ -429,6 +429,22 @@ static bool conectar_rede(void)
     if (enviar_at("AT+CEREG?", "OK", 3000, s_buf_at, sizeof(s_buf_at)))
         ESP_LOGI(TAG, "[DIAG] CEREG(LTE): %s", s_buf_at);
 
+    /* Tensão de alimentação do módulo — diagnóstico de brownout */
+    if (enviar_at("AT+CBC", "OK", 3000, s_buf_at, sizeof(s_buf_at))) {
+        /* Resposta: +CBC: 0,0,<mV> — ex: +CBC: 0,0,4950 = 4.95 V */
+        int mv = -1;
+        const char *p = strstr(s_buf_at, "+CBC:");
+        if (p) sscanf(p, "+CBC: %*d,%*d,%d", &mv);
+        if (mv > 0)
+            ESP_LOGI(TAG, "[DIAG] Tensão modem: %d mV (%.2f V)%s",
+                     mv, mv / 1000.0f, mv < 4500 ? " ← BAIXA!" : "");
+        else
+            ESP_LOGI(TAG, "[DIAG] Tensão modem: %s", s_buf_at);
+    }
+
+    /* Desativa Power Saving Mode — evita transições de potência que causam picos */
+    enviar_at("AT+CPSMS=0", "OK", 3000, nullptr, 0);
+
     ESP_LOGI(TAG, "[DIAG] ──────────────────────────────────────");
 
     /* ── Aguardar registro na rede (até ~3 min, com recuperação de resets) ── */
@@ -462,9 +478,17 @@ static bool conectar_rede(void)
             continue;  /* Não conta espera extra — próxima iteração imediatamente */
         }
 
-        /* Status 0,2 = buscando rede — aguarda mais antes de re-tentar */
+        /* Status 0,2 = buscando rede — loga CSQ e aguarda mais */
         if (strstr(s_buf_at, "+CREG: 0,2")) {
-            ESP_LOGI(TAG, "[REDE] Buscando rede... aguardando 5 s.");
+            char buf_csq[64] = {};
+            enviar_at("AT+CSQ", "OK", 2000, buf_csq, sizeof(buf_csq));
+            int csq = -1;
+            const char *pc = strstr(buf_csq, "+CSQ:");
+            if (pc) sscanf(pc, "+CSQ: %d", &csq);
+            if (csq == 99 || csq < 0)
+                ESP_LOGW(TAG, "[REDE] Buscando... CSQ=99 (sem sinal). Aguardando 5 s.");
+            else
+                ESP_LOGI(TAG, "[REDE] Buscando... CSQ=%d. Aguardando 5 s.", csq);
             vTaskDelay(pdMS_TO_TICKS(5000));
         } else {
             vTaskDelay(pdMS_TO_TICKS(3000));
