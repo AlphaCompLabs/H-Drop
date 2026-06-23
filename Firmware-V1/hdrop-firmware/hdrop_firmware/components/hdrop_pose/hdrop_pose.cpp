@@ -391,6 +391,46 @@ static bool conectar_rede(void)
     /* Desabilitar eco para não poluir respostas de comandos posteriores */
     enviar_at("ATE0", "OK", 2000, nullptr, 0);
 
+    /* ── Diagnóstico de boot do modem ────────────────────────────────────
+     * Roda uma vez por conexão para mostrar o estado inicial no serial.   */
+    ESP_LOGI(TAG, "[DIAG] ──────────────────────────────────────");
+    ESP_LOGI(TAG, "[DIAG]  DIAGNÓSTICO MODEM A7670SA");
+    ESP_LOGI(TAG, "[DIAG] ──────────────────────────────────────");
+
+    /* SIM card */
+    if (enviar_at("AT+CPIN?", "OK", 3000, s_buf_at, sizeof(s_buf_at))) {
+        if (strstr(s_buf_at, "READY"))
+            ESP_LOGI(TAG,  "[DIAG] SIM: PRONTO");
+        else if (strstr(s_buf_at, "SIM PIN"))
+            ESP_LOGE(TAG,  "[DIAG] SIM: AGUARDANDO PIN — desbloqueie o SIM");
+        else
+            ESP_LOGW(TAG,  "[DIAG] SIM: %s", s_buf_at);
+    } else {
+        ESP_LOGE(TAG, "[DIAG] SIM: sem resposta");
+    }
+
+    /* Qualidade do sinal (0-31 = válido, 99 = sem sinal) */
+    if (enviar_at("AT+CSQ", "OK", 3000, s_buf_at, sizeof(s_buf_at))) {
+        int csq = -1;
+        sscanf(s_buf_at, "%*[^+]+CSQ: %d", &csq);
+        if (csq == 99 || csq < 0)
+            ESP_LOGE(TAG,  "[DIAG] Sinal: SEM SINAL (CSQ=99) — verifique antena 4G");
+        else if (csq < 10)
+            ESP_LOGW(TAG,  "[DIAG] Sinal: FRACO (CSQ=%d)", csq);
+        else
+            ESP_LOGI(TAG,  "[DIAG] Sinal: BOM (CSQ=%d)", csq);
+    }
+
+    /* Modo de rede */
+    if (enviar_at("AT+CNMP?", "OK", 3000, s_buf_at, sizeof(s_buf_at)))
+        ESP_LOGI(TAG, "[DIAG] Modo rede: %s", s_buf_at);
+
+    /* Registro LTE */
+    if (enviar_at("AT+CEREG?", "OK", 3000, s_buf_at, sizeof(s_buf_at)))
+        ESP_LOGI(TAG, "[DIAG] CEREG(LTE): %s", s_buf_at);
+
+    ESP_LOGI(TAG, "[DIAG] ──────────────────────────────────────");
+
     /* ── Aguardar registro na rede (até ~3 min, com recuperação de resets) ── */
     bool registrado = false;
     for (int i = 0; i < 45; i++) {
