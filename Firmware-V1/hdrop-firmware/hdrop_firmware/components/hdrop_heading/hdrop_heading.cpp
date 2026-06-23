@@ -181,8 +181,33 @@ static esp_err_t qmc_init(void)
 
 static bool s_ina226_ok = false;
 
+static void i2c_scan(void)
+{
+    ESP_LOGI(TAG, "[I2C SCAN] Varrendo enderecos 0x08 a 0x77...");
+    int encontrados = 0;
+    for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+        uint8_t dummy;
+        esp_err_t r = i2c_master_write_read_device(
+            I2C_NUM_0, addr, &dummy, 0, &dummy, 1, pdMS_TO_TICKS(50));
+        if (r == ESP_OK || r == ESP_ERR_TIMEOUT) {
+            /* ESP_OK = dispositivo respondeu com ACK */
+            if (r == ESP_OK) {
+                ESP_LOGI(TAG, "[I2C SCAN] Encontrado: 0x%02X", addr);
+                encontrados++;
+            }
+        }
+    }
+    if (encontrados == 0)
+        ESP_LOGW(TAG, "[I2C SCAN] Nenhum dispositivo encontrado alem do QMC5883L.");
+    else
+        ESP_LOGI(TAG, "[I2C SCAN] Total: %d dispositivo(s).", encontrados);
+}
+
 static void ina226_init(void)
 {
+    /* Scan do barramento para diagnóstico — mostra todos os endereços ativos */
+    i2c_scan();
+
     /* Config: 16 médias, 1.1 ms/conversão, modo contínuo shunt+bus
      * Registro 0x00 = 0x4527:
      *   [11:9] AVG=010 (16 amostras), [8:6]=100, [5:3]=100, [2:0]=111 */
@@ -191,9 +216,9 @@ static void ina226_init(void)
         I2C_NUM_0, INA226_ADDR, cfg, sizeof(cfg), pdMS_TO_TICKS(200));
     if (ret == ESP_OK) {
         s_ina226_ok = true;
-        ESP_LOGI(TAG, "[INA226] Monitor de bateria inicializado (endereco 0x40).");
+        ESP_LOGI(TAG, "[INA226] Monitor de bateria inicializado (endereco 0x%02X).", INA226_ADDR);
     } else {
-        ESP_LOGW(TAG, "[INA226] Nao encontrado — monitoramento de bateria desabilitado.");
+        ESP_LOGE(TAG, "[INA226] Nao respondeu em 0x%02X. Veja o scan acima.", INA226_ADDR);
     }
 }
 
