@@ -186,19 +186,19 @@ static void i2c_scan(void)
     ESP_LOGI(TAG, "[I2C SCAN] Varrendo enderecos 0x08 a 0x77...");
     int encontrados = 0;
     for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
-        uint8_t dummy;
-        esp_err_t r = i2c_master_write_read_device(
-            I2C_NUM_0, addr, &dummy, 0, &dummy, 1, pdMS_TO_TICKS(50));
-        if (r == ESP_OK || r == ESP_ERR_TIMEOUT) {
-            /* ESP_OK = dispositivo respondeu com ACK */
-            if (r == ESP_OK) {
-                ESP_LOGI(TAG, "[I2C SCAN] Encontrado: 0x%02X", addr);
-                encontrados++;
-            }
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+        i2c_master_stop(cmd);
+        esp_err_t r = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(20));
+        i2c_cmd_link_delete(cmd);
+        if (r == ESP_OK) {
+            ESP_LOGI(TAG, "[I2C SCAN] Encontrado: 0x%02X", addr);
+            encontrados++;
         }
     }
     if (encontrados == 0)
-        ESP_LOGW(TAG, "[I2C SCAN] Nenhum dispositivo encontrado alem do QMC5883L.");
+        ESP_LOGW(TAG, "[I2C SCAN] Nenhum dispositivo encontrado.");
     else
         ESP_LOGI(TAG, "[I2C SCAN] Total: %d dispositivo(s).", encontrados);
 }
