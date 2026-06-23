@@ -1,276 +1,121 @@
 /**
  * @file main.cpp
- * @brief Firmware de campo H-DROP — sequência segura de boot e teste de manobra.
- *
- * Sequência completa:
- *   [BOOT]        WiFi AP + ESC arming + magnetômetro (calibração da NVS)
- *   [AGUARDANDO]  Motores em neutro — espera MQTT + fix GNSS
- *   [PRONTO]      Heading hold ativo → aponta para norte magnético
- *   [TESTE]       Validação de heading e coordenadas GPS
- *   [MANOBRA]     Softstart → avança 5 s a 50% → para
- *   [OPERANDO]    Heading hold retoma, monitoramento contínuo
+ * @brief Teste standalone INA226 — varredura I2C + leitura de ID e tensão.
  */
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/i2c.h"
 #include "esp_log.h"
-#include "esp_system.h"
-#include "hdrop_motor.h"
-#include "hdrop_heading.h"
-#include "hdrop_pose.h"
-#include "hdrop_ota.h"
-#include <cmath>
 
-static const char *TAG = "MAIN";
+static const char *TAG = "TESTE_INA226";
 
-/* ── Parâmetros da manobra ──────────────────────────────────────── */
-/** Potência de avanço: 50% de (2000 - 1520 µs) = 240 µs acima do ponto morto. */
-#define MANOBRA_POTENCIA      0.5f
-/** Duração do avanço em segundos. */
-#define MANOBRA_DURACAO_S     5
-/** Duração do softstart em passos de 100 ms (20 × 100 ms = 2 s). */
-#define SOFTSTART_PASSOS      20
-/** Timeout máximo aguardando MQTT + GNSS (5 minutos). */
-#define TIMEOUT_PRONTO_MS     (5 * 60 * 1000)
+#define I2C_PORT    I2C_NUM_0
+#define PIN_SDA     21
+#define PIN_SCL     22
+#define I2C_FREQ    100000
 
-static const char *reset_reason_str(esp_reset_reason_t r)
+/* INA226 registers */
+#define REG_CONFIG   0x00
+#define REG_BUS_V    0x02
+#define REG_MFR_ID   0xFE   /* deve retornar 0x5449 ("TI") */
+#define REG_DIE_ID   0xFF   /* deve retornar 0x2260 */
+
+static void i2c_init(void)
 {
-    switch (r) {
-        case ESP_RST_POWERON:   return "POWER_ON";
-        case ESP_RST_PANIC:     return "PANIC";
-        case ESP_RST_INT_WDT:   return "INT_WATCHDOG";
-        case ESP_RST_TASK_WDT:  return "TASK_WATCHDOG";
-        case ESP_RST_BROWNOUT:  return "BROWNOUT";
-        case ESP_RST_SW:        return "SW_RESET";
-        default:                return "OUTRO";
-    }
+    i2c_config_t cfg = {};
+    cfg.mode             = I2C_MODE_MASTER;
+    cfg.sda_io_num       = PIN_SDA;
+    cfg.scl_io_num       = PIN_SCL;
+    cfg.sda_pullup_en    = GPIO_PULLUP_ENABLE;
+    cfg.scl_pullup_en    = GPIO_PULLUP_ENABLE;
+    cfg.master.clk_speed = I2C_FREQ;
+    i2c_param_config(I2C_PORT, &cfg);
+    i2c_driver_install(I2C_PORT, I2C_MODE_MASTER, 0, 0, 0);
 }
 
-/* Softstart: rampa de 0 até `v_alvo` em SOFTSTART_PASSOS × 100 ms. */
-static void softstart(float v_alvo)
+static void i2c_scan(void)
 {
-    ESP_LOGI(TAG, "[MANOBRA] Softstart → %.0f%% em %d s...",
-             v_alvo * 100.0f, SOFTSTART_PASSOS / 10);
-    for (int i = 1; i <= SOFTSTART_PASSOS; i++) {
-        float v = v_alvo * ((float)i / (float)SOFTSTART_PASSOS);
-        motor_set_speeds(v, v);
-        vTaskDelay(pdMS_TO_TICKS(100));
+    ESP_LOGI(TAG, "════ SCAN I2C (0x08–0x77) ════");
+    int n = 0;
+    for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+        i2c_master_stop(cmd);
+        esp_err_t r = i2c_master_cmd_begin(I2C_PORT, cmd, pdMS_TO_TICKS(20));
+        i2c_cmd_link_delete(cmd);
+        if (r == ESP_OK) {
+            ESP_LOGI(TAG, "  Encontrado: 0x%02X", addr);
+            n++;
+        }
+    }
+    ESP_LOGI(TAG, "Total: %d dispositivo(s)", n);
+}
+
+/* Lê registrador de 16 bits de qualquer endereço I2C */
+static esp_err_t read_reg16(uint8_t addr, uint8_t reg, uint16_t *out)
+{
+    uint8_t buf[2];
+    esp_err_t r = i2c_master_write_read_device(
+        I2C_PORT, addr, &reg, 1, buf, 2, pdMS_TO_TICKS(100));
+    if (r == ESP_OK)
+        *out = ((uint16_t)buf[0] << 8) | buf[1];
+    return r;
+}
+
+static void testar_ina226(uint8_t addr)
+{
+    ESP_LOGI(TAG, "── Testando 0x%02X ──────────────────────", addr);
+
+    uint16_t mfr = 0, die = 0, cfg = 0, vbus = 0;
+
+    if (read_reg16(addr, REG_MFR_ID, &mfr) == ESP_OK)
+        ESP_LOGI(TAG, "  Mfr ID : 0x%04X %s", mfr,
+                 mfr == 0x5449 ? "(TI — correto!)" : "(inesperado)");
+    else
+        ESP_LOGE(TAG, "  Mfr ID : FALHA DE LEITURA");
+
+    if (read_reg16(addr, REG_DIE_ID, &die) == ESP_OK)
+        ESP_LOGI(TAG, "  Die ID : 0x%04X %s", die,
+                 die == 0x2260 ? "(INA226 confirmado!)" : "(inesperado)");
+    else
+        ESP_LOGE(TAG, "  Die ID : FALHA DE LEITURA");
+
+    if (read_reg16(addr, REG_CONFIG, &cfg) == ESP_OK)
+        ESP_LOGI(TAG, "  Config : 0x%04X", cfg);
+
+    /* Tensão de barramento: LSB = 1.25 mV */
+    if (read_reg16(addr, REG_BUS_V, &vbus) == ESP_OK) {
+        int32_t mv = (int32_t)vbus * 5 / 4;
+        ESP_LOGI(TAG, "  Tensão : %ldmV (%.2fV)", mv, mv / 1000.0f);
+    } else {
+        ESP_LOGE(TAG, "  Tensão : FALHA DE LEITURA");
     }
 }
 
 extern "C" void app_main(void)
 {
-    ESP_LOGW(TAG, ">>> Reset anterior: %s <<<", reset_reason_str(esp_reset_reason()));
     ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   H-DROP ASV — Firmware de campo     ║");
+    ESP_LOGI(TAG, "║   TESTE INA226                       ║");
     ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
 
-    /* ── [BOOT 0] WiFi OTA — sobe em background ───────────────────── */
-    esp_err_t ret = ota_init();
-    if (ret != ESP_OK)
-        ESP_LOGW(TAG, "OTA sem WiFi (%s).", esp_err_to_name(ret));
+    i2c_init();
+    vTaskDelay(pdMS_TO_TICKS(500));
 
-    /* ── [BOOT 1] Motores — arming 4 s, neutro garantido ─────────── */
-    ret = motor_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "FATAL: motor_init falhou. Abortando.");
-        return;
-    }
-
-    /* ── [BOOT 2] Magnetômetro — carrega calibração da NVS ─────────
-     *    Calibração já está gravada. heading_calibrate() não é chamado.  */
-    ret = heading_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "FATAL: heading_init falhou. Abortando.");
-        return;
-    }
-
-    /* ── [BOOT 2.5] Validação do magnetômetro ──────────────────────
-     *    Lê 6 amostras em 3 s para confirmar I2C e mostrar heading inicial. */
-    ESP_LOGI(TAG, "──────────────────────────────────────────");
-    ESP_LOGI(TAG, "  TESTE MAGNETÔMETRO (3 s)");
-    ESP_LOGI(TAG, "──────────────────────────────────────────");
-    {
-        int falhas = 0;
-        for (int i = 1; i <= 6; i++) {
-            float theta = 0.0f;
-            if (heading_read(&theta)) {
-                ESP_LOGI(TAG, "  [MAG %d/6] Heading: %.1f graus  OK", i,
-                         theta * 180.0f / (float)M_PI);
-            } else {
-                ESP_LOGE(TAG, "  [MAG %d/6] FALHA I2C", i);
-                falhas++;
-            }
-            vTaskDelay(pdMS_TO_TICKS(500));
-        }
-        if (falhas == 0) {
-            ESP_LOGI(TAG, "  Magnetômetro: OK");
-        } else if (falhas < 6) {
-            ESP_LOGW(TAG, "  Magnetômetro: %d/6 falhas — conexão instável", falhas);
-        } else {
-            ESP_LOGE(TAG, "  Magnetômetro: SEM RESPOSTA — verifique fiação");
-        }
-    }
-    ESP_LOGI(TAG, "──────────────────────────────────────────");
-
-    /* ── [BOOT 3] Pose/Modem — FSM aguarda 12 s internamente ───────
-     *    Deixa o A7670SA passar o pico de corrente de boot antes de AT. */
-    ret = pose_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "FATAL: pose_init falhou. Abortando.");
-        return;
-    }
-
-    ESP_LOGI(TAG, "Boot completo. Motores em neutro. Aguardando MQTT + GNSS...");
-
-    /* ════════════════════════════════════════════════════════════════
-     * [AGUARDANDO] — motores em neutro, espera MQTT e fix GNSS
-     * ════════════════════════════════════════════════════════════════ */
-    uint32_t t_inicio = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
-    bool mqtt_ok  = false;
-    bool gnss_ok  = false;
-
-    while (!(mqtt_ok && gnss_ok)) {
-        vTaskDelay(pdMS_TO_TICKS(2000));
-
-        mqtt_ok = pose_mqtt_connected();
-        hdrop_pose_t p = pose_get();
-        gnss_ok = p.gnss_valid;
-
-        float theta = 0.0f;
-        heading_read(&theta);
-
-        int32_t vbat = heading_battery_mv();
-        if (vbat > 0) {
-            const char *estado = vbat < BATERIA_MINIMA_MV ? "BAIXA!" :
-                                 vbat < 12000            ? "ok"     : "OK";
-            ESP_LOGI(TAG, "[AGUARDANDO] MQTT:%s  GNSS:%s  heading=%.1f°  bat=%ldmV(%s)  heap=%lu",
-                     mqtt_ok ? "OK" : "...",
-                     gnss_ok ? "OK" : "...",
-                     theta * 180.0f / (float)M_PI,
-                     vbat, estado,
-                     (unsigned long)esp_get_free_heap_size());
-        } else {
-            ESP_LOGI(TAG, "[AGUARDANDO] MQTT:%s  GNSS:%s  heading=%.1f°  heap=%lu",
-                     mqtt_ok ? "OK" : "...",
-                     gnss_ok ? "OK" : "...",
-                     theta * 180.0f / (float)M_PI,
-                     (unsigned long)esp_get_free_heap_size());
-        }
-
-        if (gnss_ok)
-            ESP_LOGI(TAG, "[AGUARDANDO] Pos: x=%.2f m  y=%.2f m", p.x, p.y);
-
-        /* Timeout de segurança */
-        uint32_t decorrido = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS) - t_inicio;
-        if (decorrido > TIMEOUT_PRONTO_MS) {
-            ESP_LOGW(TAG, "Timeout aguardando prontidão (%s %s). Prosseguindo assim mesmo.",
-                     mqtt_ok ? "MQTT:OK" : "MQTT:FAIL",
-                     gnss_ok ? "GNSS:OK" : "GNSS:FAIL");
-            break;
-        }
-    }
-
-    /* ════════════════════════════════════════════════════════════════
-     * [PRONTO] — ASV pronto para operação
-     * ════════════════════════════════════════════════════════════════ */
-    ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   ASV PRONTO PARA OPERAÇÃO           ║");
-    ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
-
-    /* Ativa heading hold — aponta para norte magnético */
-    heading_hold(0.0f);
-    ESP_LOGI(TAG, "[PRONTO] Heading hold ativo → norte magnético (0°).");
-    ESP_LOGI(TAG, "[PRONTO] Aguardando 5 s para estabilizar orientação...");
-    vTaskDelay(pdMS_TO_TICKS(5000));
-
-    /* ════════════════════════════════════════════════════════════════
-     * [TESTE] — validação de heading e GPS
-     * ════════════════════════════════════════════════════════════════ */
-    {
-        float theta = 0.0f;
-        heading_read(&theta);
-        hdrop_pose_t p = pose_get();
-
-        ESP_LOGI(TAG, "── TESTE DE HEADING ─────────────────────");
-        ESP_LOGI(TAG, "   Heading atual:  %.3f rad  (%.1f°)", theta, theta * 180.0f / (float)M_PI);
-        ESP_LOGI(TAG, "   Alvo:           0.000 rad  (0.0° — norte)");
-        ESP_LOGI(TAG, "   Erro:           %.1f°", (theta * 180.0f / (float)M_PI));
-
-        ESP_LOGI(TAG, "── TESTE DE LOCALIZAÇÃO GPS ─────────────");
-        if (p.gnss_valid) {
-            ESP_LOGI(TAG, "   Fix GNSS: VÁLIDO");
-            ESP_LOGI(TAG, "   x = %.4f m  (leste/oeste do ponto de origem)", p.x);
-            ESP_LOGI(TAG, "   y = %.4f m  (norte/sul do ponto de origem)", p.y);
-        } else {
-            ESP_LOGW(TAG, "   Fix GNSS: AGUARDANDO SATÉLITES");
-        }
-        ESP_LOGI(TAG, "─────────────────────────────────────────");
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    /* ════════════════════════════════════════════════════════════════
-     * [MANOBRA] — avança 5 s a 50% de potência
-     * ════════════════════════════════════════════════════════════════ */
-    ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   MANOBRA: AVANÇO 5 s @ 50%%          ║");
-    ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
-    ESP_LOGI(TAG, "[MANOBRA] PWM alvo: %d µs  (ponto morto=%d + %d µs)",
-             (int)(MOTOR_PONTO_MORTO_US + MANOBRA_POTENCIA * MOTOR_DELTA_MAX_US),
-             MOTOR_PONTO_MORTO_US,
-             (int)(MANOBRA_POTENCIA * MOTOR_DELTA_MAX_US));
-
-    /* Desativa heading hold — motores ficam livres para avançar reto */
-    heading_hold(-1.0f);
-    vTaskDelay(pdMS_TO_TICKS(200));
-
-    /* Softstart: 2 s de rampa até 50% */
-    softstart(MANOBRA_POTENCIA);
-
-    /* Avanço a 50% por 5 s */
-    ESP_LOGI(TAG, "[MANOBRA] Avançando %d s @ %.0f%%...", MANOBRA_DURACAO_S, MANOBRA_POTENCIA * 100.0f);
-    for (int i = 0; i < MANOBRA_DURACAO_S * 10; i++) {
-        motor_set_speeds(MANOBRA_POTENCIA, MANOBRA_POTENCIA);
-        if (i % 10 == 0) {
-            float theta = 0.0f;
-            heading_read(&theta);
-            ESP_LOGI(TAG, "[MANOBRA] t=%ds | PWM=%dµs | heading=%.1f°",
-                     i / 10,
-                     motor_get_last_pwm_left(),
-                     theta * 180.0f / (float)M_PI);
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-
-    /* Para os motores */
-    motor_stop();
-    ESP_LOGI(TAG, "[MANOBRA] PARADO.");
-    vTaskDelay(pdMS_TO_TICKS(1000));
-
-    /* ════════════════════════════════════════════════════════════════
-     * [OPERANDO] — retoma heading hold e monitoramento contínuo
-     * ════════════════════════════════════════════════════════════════ */
-    heading_hold(0.0f);
-    ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   MANOBRA CONCLUÍDA — EM OPERAÇÃO    ║");
-    ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
-
+    int ciclo = 0;
     while (true) {
-        float theta = 0.0f;
-        heading_read(&theta);
-        hdrop_pose_t p = pose_get();
+        ciclo++;
+        ESP_LOGI(TAG, "\n══ CICLO %d ══════════════════════════════", ciclo);
 
-        int32_t vbat_op = heading_battery_mv();
-        ESP_LOGI(TAG, "heading=%.1f° | x=%.2fm y=%.2fm | fix=%s | mqtt=%s | bat=%s | heap=%lu",
-                 theta * 180.0f / (float)M_PI,
-                 p.x, p.y,
-                 p.gnss_valid         ? "OK" : "--",
-                 pose_mqtt_connected() ? "OK" : "--",
-                 vbat_op > 0 ? (vbat_op < BATERIA_MINIMA_MV ? "BAIXA!" :
-                                vbat_op < 12000             ? "ok"     : "OK") : "--",
-                 (unsigned long)esp_get_free_heap_size());
+        i2c_scan();
 
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        /* Testa os 4 endereços possíveis do INA226 (A0/A1 em GND, VS, SDA, SCL) */
+        uint8_t candidatos[] = { 0x40, 0x41, 0x44, 0x45 };
+        for (int i = 0; i < 4; i++)
+            testar_ina226(candidatos[i]);
+
+        ESP_LOGI(TAG, "══ FIM CICLO %d — aguardando 5 s ══════════", ciclo);
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
