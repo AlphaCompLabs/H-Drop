@@ -1,0 +1,17 @@
+# Arquivos auxiliares LaTeX
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.log
+*.out
+*.run.xml
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.xdv
+# manter o PDF final fora do versionamento (descomente se quiser ignorar)
+# main.pdf
