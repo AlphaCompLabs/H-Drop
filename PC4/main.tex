@@ -1,7 +1,7 @@
 % ============================================================
 % Engineering Project Report Template
 % Adaptado para relatório técnico de engenharia IEEE
-% PC3 — H-DROP: Módulo logístico autônomo de entrega
+% PC4 — H-DROP: Módulo logístico autônomo de entrega
 % ============================================================
 
 \documentclass[12pt,a4paper]{article}
@@ -65,7 +65,7 @@
 \usepackage{authblk}
 
 % ============================================================
-\title{\textbf{Automação e Robótica -- Relatório Técnico de Projeto [PC3]}\\
+\title{\textbf{Automação e Robótica -- Relatório Técnico de Projeto [PC4]}\\
 \vspace{0.5cm}
 \large Título do Projeto: H-DROP - Módulo logístico autônomo de entrega}
 
@@ -80,11 +80,11 @@
 \maketitle
 
 % ============================================================
-\section{Resumo executivo do estágio atual do projeto}
+\section{Resumo executivo}
 
-O projeto H-DROP consiste no desenvolvimento de um Veículo de Superfície Autônomo (ASV) do tipo catamarã, concebido para atender demandas de logística humanitária e comercial em regiões de difícil acesso terrestre. Desde o Ponto de Controle 2 (PC2), o projeto avançou significativamente da fase de integração em bancada para a validação física do sistema completo. A estrutura em PVC foi montada, o teste de flutuabilidade foi realizado com sucesso, os motores e ESCs foram integrados ao chassi, e a bateria LiFePO4 foi validada em conjunto com o módulo BMS. Os motores foram testados com a bateria do projeto, confirmando a viabilidade do subsistema de propulsão.
+O projeto H-DROP consiste em um Veículo de Superfície Autônomo (ASV) do tipo catamarã, concebido para logística humanitária e comercial em regiões de difícil acesso terrestre. Este relatório (PC4) registra o estágio final do desenvolvimento, no qual todos os subsistemas — estrutura física, propulsão, alimentação, sensoriamento, geolocalização e comunicação — foram integrados em uma única plataforma funcional e submetidos a testes de validação. A estrutura em PVC, com a torre de comunicação e sensoriamento montada, foi testada em ambiente aquático, confirmando flutuabilidade e estabilidade sob a carga real da eletrônica embarcada. Os dois motores BLDC foram sincronizados e acionados pela bateria LiFePO4; o sistema de alimentação foi integrado de forma definitiva a todos os módulos de processamento (ESP32 e Arduino); e o subsistema de comunicação móvel 4G com geolocalização GNSS foi validado em campo.
 
-No âmbito do \textit{firmware}, o sistema opera sobre FreeRTOS com uma Máquina de Estados Finita (FSM), e os subsistemas de telemetria 4G/GNSS via MQTT e a Estação de Controle de Missão em Angular foram consolidados. Os próximos passos até o PC4 compreendem a calibração do controlador PID em ambiente aquático, os ensaios de navegação autônoma ponto a ponto, a validação do sistema anticolisão em movimento e a coleta de dados de desempenho para análise final.
+No âmbito do \textit{firmware}, o sistema opera sobre FreeRTOS com uma Máquina de Estados Finita (FSM), distribuída entre a ESP32 (controle, navegação e telemetria 4G/GNSS) e o Arduino Nano (sensoriamento anticolisão, pesagem e sinalização). A telemetria via MQTT e a Estação de Controle de Missão em Angular foram consolidadas e exercitadas em conjunto com o hardware embarcado. Este documento analisa criticamente os resultados obtidos na integração final, o grau de atendimento dos requisitos estabelecidos, as limitações remanescentes — em especial a sintonização fina do controle autônomo de navegação — e as direções para a evolução futura da solução.
 
 \vspace{0.5cm}
 
@@ -99,7 +99,21 @@ A demanda por esse tipo de sistema cresce tanto pela necessidade de assistência
 
 O desenvolvimento está alinhado aos conteúdos de controle discreto e sistemas embarcados da disciplina. A implementação exige uma plataforma microcontrolada para gerenciar a propulsão diferencial de motores \textit{brushless} e garantir que o ASV execute trajetórias autônomas de forma segura. Assim, o projeto consolida a integração de \textit{hardware} e \textit{software} para resolver um problema real de logística, transformando a via aquática em um canal de conectividade e suporte vital.
 
-\textbf{Evolução desde os pontos de controle anteriores:} No PC1, o projeto estava em fase puramente conceitual, com modelagem matemática dos subsistemas, definição de requisitos e proposta arquitetural. No PC2, a transição para a prática revelou desafios reais: queima de um ESP32 por falha de soldagem, limitação do sensor ultrassônico único e dificuldades de manufatura do chassi em PVC. Esses desafios foram endereçados com correções técnicas documentadas. No PC3, o protótipo físico existe, flutua, e tem seus principais subsistemas elétricos e de \textit{firmware} validados em bancada e em ensaios preliminares.
+\textbf{Evolução desde os pontos de controle anteriores:} No PC1, o projeto estava em fase puramente conceitual, com modelagem matemática dos subsistemas, definição de requisitos e proposta arquitetural. No PC2, a transição para a prática revelou desafios reais: queima de um ESP32 por falha de soldagem, limitação do sensor ultrassônico único e dificuldades de manufatura do chassi em PVC. Esses desafios foram endereçados com correções técnicas documentadas. No PC3, o protótipo físico passou a existir e a flutuar, com seus principais subsistemas elétricos e de \textit{firmware} validados em bancada e em ensaios preliminares. No PC4 — estágio reportado neste documento — todos os subsistemas foram integrados em uma plataforma única: a torre de comunicação foi montada, o barramento de alimentação foi acoplado a todos os módulos de processamento (ESP32 e Arduino), os motores foram sincronizados, o enlace 4G/GNSS foi validado em campo e a embarcação completa foi ensaiada em ambiente aquático.
+
+\textbf{Objetivo geral:} desenvolver e validar um Veículo de Superfície Autônomo de baixo custo, capaz de transportar carga útil entre dois pontos por navegação autônoma orientada por GNSS, com telemetria remota em tempo real via rede celular.
+
+\noindent\textbf{Objetivos específicos:}
+\begin{itemize}
+\item construir uma plataforma flutuante estável (catamarã em PVC) com compartimento de carga estanque;
+\item implementar propulsão diferencial por dois motores BLDC sincronizados via ESCs bidirecionais;
+\item gerenciar a energia de um \textit{pack} LiFePO4 com BMS e estimativa de SoC por Contagem de Coulomb;
+\item integrar geolocalização (GNSS) e orientação (magnetômetro) para navegação por \textit{waypoints};
+\item prover comunicação móvel 4G com telemetria MQTT e Estação de Controle de Missão web;
+\item dotar a embarcação de percepção anticolisão, pesagem de carga e sinalização visual de estado.
+\end{itemize}
+
+\textbf{Delimitação do escopo efetivamente implementado:} o trabalho entregou a plataforma física integrada, o subsistema energético, a propulsão sincronizada, a comunicação 4G/GNSS validada em campo e o \textit{firmware} de controle/telemetria, com ensaio da plataforma completa em água. A navegação autônoma ponto a ponto foi desenvolvida e exercitada em ambiente de simulação de alta fidelidade; a sintonização fina dos ganhos do controlador em malha fechada na água permanece como a principal frente de refinamento, discutida na Seção de Resultados.
 
 % ============================================================
 \section{Trabalhos Correlatos}
@@ -290,7 +304,7 @@ T_{tx} = \frac{S_{bytes} \cdot 10}{V_{baud}}
 
 O H-DROP é desenvolvido de forma incremental e iterativa, com entregas parciais em Pontos de Controle (PC1 a PC4). A abordagem prioriza a validação independente de cada subsistema antes da integração total, reduzindo o risco de falhas sistêmicas em ambiente aquático.
 
-\subsection{Etapas Executadas no PC3}
+\subsection{Etapas Executadas (PC3 ao PC4)}
 
 O desenvolvimento foi organizado em três frentes simultâneas:
 
@@ -298,6 +312,7 @@ O desenvolvimento foi organizado em três frentes simultâneas:
 \item \textbf{Simulação de Controle e Percepção (\textit{Software-in-the-Loop}):} Utilização da Estação de Controle e do \textit{broker} MQTT para injetar dados simulados de GNSS, magnetômetro e ultrassônico diretamente no ESP32. O objetivo foi validar a lógica PID, os filtros de média móvel e a máquina de estados de navegação antes do contato com a água.
 \item \textbf{Integração Eletromecânica em Bancada:} União da bateria LiFePO4, BMS, INA226, ESCs e motores \textit{brushless} fora do ambiente aquático, com calibração do algoritmo de Contagem de Coulomb e implementação do \textit{throttling} por nível de carga.
 \item \textbf{Montagem Estrutural do Catamarã:} Construção do chassi em PVC, instalação dos cascos, integração dos motores e ESCs, e realização dos primeiros ensaios hidrostáticos.
+\item \textbf{Integração Final e Validação Aquática (PC4):} Montagem da torre de comunicação e sensoriamento, acoplamento definitivo do barramento de alimentação a todos os módulos de processamento (ESP32 e Arduino Nano), sincronização dos dois motores BLDC, validação do enlace 4G/GNSS em campo e ensaio da plataforma completa em ambiente aquático.
 \end{itemize}
 
 \subsection{Ferramentas Utilizadas}
@@ -541,7 +556,7 @@ A Tabela \ref{tab:requisitos_tecnicos} consolida todos os requisitos técnicos d
 }
 
 % ============================================================
-\section{Avanços e Resultados Parciais}
+\section{Integração Final, Resultados e Validação}
 
 \subsubsection{Estrutura do Catamarã}
 
@@ -948,6 +963,15 @@ O \textit{firmware} estruturado sobre FreeRTOS validou com sucesso a publicaçã
 \label{fig:evidencia_firmware}
 \end{figure}
 
+No PC4, o módulo A7670SA foi validado em campo: o terminal de geolocalização obteve \textit{fix} GNSS estável e estabeleceu o enlace 4G LTE, transmitindo coordenadas reais (latitude, longitude e curso) para a Estação de Controle. A Figura~\ref{fig:terminal_gnss} mostra o terminal GNSS em funcionamento durante os ensaios.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{Terminal_GNSS_funcionando.jpeg}
+\caption{Terminal de geolocalização GNSS em funcionamento: aquisição de \textit{fix} e transmissão de coordenadas via 4G.}
+\label{fig:terminal_gnss}
+\end{figure}
+
 \subsubsection{Estação de Controle de Missão}
 
 A Estação de Controle implementada em Angular~19 recebe o \textit{streaming} de telemetria via WebSocket e renderiza a posição do ASV em mapa Leaflet. O \textit{dashboard} permite o despacho dinâmico de novos destinos por interação direta no mapa. A Figura \ref{fig:evidencia_software} ilustra a interface.
@@ -959,14 +983,21 @@ A Estação de Controle implementada em Angular~19 recebe o \textit{streaming} d
 \label{fig:evidencia_software}
 \end{figure}
 
-\subsubsection{Planejamento da Torre de Controle}
-Como ajuste crítico de projeto para o PC3 e elemento de integração entre o hardware de radiofrequência, o firmware e a estrutura física, foi projetado o acoplamento de uma \textbf{Torre de Controle Vertical} em PVC rígido na embarcação. O planejamento desta estrutura justifica-se pelos seguintes requisitos técnicos de integração:
+\subsubsection{Montagem da Torre de Comunicação e Sensoriamento}
+Como elemento de integração entre o hardware de radiofrequência, o \textit{firmware} e a estrutura física, foi construída e acoplada à embarcação uma \textbf{Torre Vertical} em PVC rígido. No PC4 a torre saiu da fase de projeto e foi efetivamente montada na proa do catamarã (Figura~\ref{fig:torre_montada}), elevando as antenas GNSS/4G e o magnetômetro acima do convés. A solução atende, na prática, aos três requisitos técnicos de integração previstos:
 
 \begin{enumerate}
-    \item \textbf{Isolamento Eletromagnético da Bússola:} O magnetômetro QMC5883L (I2C nos pinos GPIO21/SDA e GPIO22/SCL) exige isolamento contra campos magnéticos parasitas gerados pelos motores brushless e pelo cabeamento de 12V. A torre eleva o sensor verticalmente, mitigando o efeito \textit{hard-iron} e garantindo a precisão do cálculo de proa ($\theta = \operatorname{atan2}(Y,X)$).
-    \item \textbf{Desimpedimento do Plano de Terra RF:} A antena ativa de GNSS e a antena de chicote 4G LTE foram posicionadas no topo da torre, desimpedidas da lâmina d'água e de superfícies reflexivas, otimizando o \textit{Time-to-First-Fix} (TTFF) para manter estabilidade com 14 a 16 satélites rastreados.
-    \item \textbf{Passagem de Cabeamento e Estanqueidade:} O interior cilíndrico da torre servirá como duto para a fiação blindada de sinal e alimentação, que será soldada definitivamente e direcionada para a caixa estanque IP67 inferior por meio de prensa-cabos, eliminando falhas por mau contato mecânico sob vibração.
+    \item \textbf{Isolamento Eletromagnético da Bússola:} O magnetômetro QMC5883L (I2C nos pinos GPIO21/SDA e GPIO22/SCL) é mantido afastado dos campos magnéticos parasitas gerados pelos motores \textit{brushless} e pelo cabeamento de 12V. A torre eleva o sensor verticalmente, mitigando o efeito \textit{hard-iron} e preservando a precisão do cálculo de proa ($\theta = \operatorname{atan2}(Y,X)$).
+    \item \textbf{Desimpedimento do Plano de Terra RF:} A antena ativa de GNSS e a antena de chicote 4G LTE foram posicionadas no topo da torre, desimpedidas da lâmina d'água e de superfícies reflexivas, otimizando o \textit{Time-to-First-Fix} (TTFF) e mantendo estabilidade de rastreamento de satélites.
+    \item \textbf{Passagem de Cabeamento e Estanqueidade:} O interior cilíndrico da torre serve como duto para a fiação blindada de sinal e alimentação, direcionada para a caixa estanque inferior por meio de prensa-cabos, eliminando falhas por mau contato mecânico sob vibração.
 \end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.5\textwidth]{Projeto Fisico com a Torre.jpeg}
+\caption{Protótipo físico do H-DROP com a torre de comunicação e sensoriamento montada na proa.}
+\label{fig:torre_montada}
+\end{figure}
 
 \subsection{Subsistema de Percepção (Sensoriamento)}
 
@@ -1023,13 +1054,51 @@ Três frentes de expansão foram implementadas:
 \end{itemize}
 
 
-\subsection{Discussão dos Resultados}
+\subsection{Integração Física Final da Plataforma}
 
-O teste de flutuabilidade confirma que a estrutura física é viável, mas ainda requer os flutuadores de EVA para atingir a margem de projeto. A integração dos motores valida a compatibilidade mecânica e elétrica do sistema de propulsão, mas a calibração da malha PID em ambiente aquático, etapa essencial para a missão autônoma, permanece como trabalho a concluir no PC4.
+Na etapa final, todos os subsistemas foram reunidos em uma única plataforma operacional. A torre de comunicação e sensoriamento foi montada na proa (Figura~\ref{fig:torre_montada}), elevando as antenas GNSS/4G e o magnetômetro acima da lâmina d'água e do cabeamento de potência. O barramento de alimentação LiFePO4 foi integrado de forma definitiva a \textbf{todos os módulos de processamento} — a ESP32 (controle, navegação e telemetria) e o Arduino Nano (sensoriamento anticolisão, pesagem e sinalização) — alimentados pelos ramais lógico (\textit{Buck} 5~V) e de tração (ESCs) descritos na Seção de Hardware. Os dois motores BLDC foram \textbf{sincronizados} via ESCs bidirecionais, respondendo de forma coordenada aos comandos diferenciais de avanço, ré e giro sobre o próprio eixo.
 
-A Estação de Controle e o \textit{firmware} de telemetria atingiram os requisitos de latência e persistência definidos. A queima do ESP32 no PC2 foi corrigida com isolamento termorretrátil em todos os terminais expostos e revisão do barramento I2C, e não se repetiu nos testes subsequentes.
+A embarcação completa, com a torre instalada e a eletrônica embarcada, foi submetida a \textbf{ensaio em ambiente aquático}, confirmando a flutuabilidade, a estabilidade transversal do catamarã e a integridade do compartimento eletrônico sob a carga real dos subsistemas integrados.
 
-A dessincronização de dados entre o \textit{firmware} e o \textit{backend} foi resolvida com padronização da API sob o padrão \texttt{/api/v1/} e testes de \textit{loopback} via \textit{broker} HiveMQ. A instabilidade do 4G causada por picos de corrente de até 2{,}8~A foi mitigada pelos capacitores de tântalo, com publicação estabilizada a 2~Hz.
+\subsection{Resultados e Discussão}
+
+Esta seção avalia criticamente o desempenho da solução frente aos requisitos estabelecidos ao longo do projeto.
+
+\paragraph{O sistema funcionou como esperado?} Em linhas gerais, sim. A integração estrutural, eletromecânica e de comunicação foi concluída e a plataforma operou de forma coordenada em água. Os subsistemas de estrutura física, propulsão, alimentação, geolocalização e comunicação responderam conforme o projeto. As ressalvas concentram-se na navegação autônoma totalmente não supervisionada, cuja malha de controle ainda depende de sintonização fina em campo.
+
+\paragraph{Quais requisitos foram atendidos?} A Tabela~\ref{tab:atendimento} sintetiza o grau de atendimento por subsistema. Foram plenamente atendidos: a flutuabilidade e a estanqueidade da estrutura (validadas em água com a eletrônica embarcada); a sincronização e o acionamento dos motores pela bateria do projeto; a integração e a proteção do barramento de energia (BMS, \textit{shunt} externo INA226, conector \textit{anti-spark}, diodos Schottky); a aquisição de \textit{fix} GNSS e o enlace 4G LTE validados em campo (Figura~\ref{fig:terminal_gnss}); e a telemetria MQTT com a Estação de Controle em Angular, dentro dos limites de latência e persistência definidos.
+
+\paragraph{Quais requisitos não foram plenamente atendidos?} A navegação autônoma ponto a ponto em malha fechada na água foi exercitada em simulação de alta fidelidade, mas os ganhos do controlador ($K_p$, $K_i$, $K_d$) não foram calibrados em regime real com o conjunto completo de distúrbios hidrodinâmicos. A validação do sistema anticolisão em movimento permaneceu parcial. A reserva de flutuabilidade, sem os flutuadores de EVA, ficou abaixo da meta de projeto de 40\%.
+
+\paragraph{Quais foram as causas prováveis das limitações?} A principal causa é a dependência da disponibilidade simultânea de todo o hardware integrado e de janelas de ensaio em água para o ajuste iterativo do PID — atividade naturalmente posterior à integração física, concluída ao fim do cronograma. Soma-se a ausência de um \textit{driver} de IMU real durante boa parte do desenvolvimento, que manteve o termo derivativo de \textit{heading} ($g_z$) em regime simulado.
+
+\paragraph{O que pode ser melhorado em uma próxima versão?} (i) Calibração sistemática dos ganhos de controle por ensaios instrumentados em água, com registro de telemetria; (ii) instalação dos flutuadores de EVA para elevar a reserva de flutuabilidade acima de 40\%; (iii) fusão inercial com o MPU-6050 real para amortecer a oscilação angular; (iv) integração direta \textit{firmware}↔\textit{broker} MQTT em campo, substituindo o servidor de simulação; e (v) compensação ativa da zona morta dos ESCs no controlador para eliminar o acúmulo indevido do termo integral.
+
+\paragraph{Correções consolidadas.} A queima do ESP32 (PC2) foi corrigida com isolamento termorretrátil e revisão do barramento I2C, sem recorrência. A dessincronização \textit{firmware}/\textit{backend} foi resolvida com padronização da API em \texttt{/api/v1/} e testes de \textit{loopback} via HiveMQ. A instabilidade do 4G por picos de corrente de até 2{,}8~A foi mitigada por capacitores de tântalo, com publicação estabilizada a 2~Hz.
+
+\begin{table}[H]
+\centering
+\caption{Grau de atendimento dos requisitos por subsistema no PC4}
+\label{tab:atendimento}
+\renewcommand{\arraystretch}{1.3}
+\small
+\begin{tabularx}{\textwidth}{|p{3.2cm}|X|c|}
+\hline
+\rowcolor{gray!20}
+\textbf{Subsistema} & \textbf{Requisito-chave} & \textbf{Status} \\ \hline
+Estrutura Física (EF) & Flutuabilidade, estabilidade e estanqueidade com eletrônica embarcada (ensaio aquático) & Atendido \\ \hline
+\rowcolor{gray!10}
+Propulsão (PR) & Sincronização dos motores BLDC e acionamento pela bateria do projeto & Atendido \\ \hline
+Gerenc. Energético (GE) & Barramento LiFePO4 + BMS, INA226 com \textit{shunt} externo, proteções elétricas & Atendido \\ \hline
+\rowcolor{gray!10}
+Geolocalização (GR) & \textit{Fix} GNSS estável e enlace 4G LTE validados em campo & Atendido \\ \hline
+Comunicação (CM) & Telemetria MQTT e Estação de Controle (latência/persistência) & Atendido \\ \hline
+\rowcolor{gray!10}
+Controle (CT) & Navegação autônoma em malha fechada na água com PID calibrado & Parcial \\ \hline
+Sensores/Percepção (SP) & Anticolisão em movimento; pesagem e sinalização integradas (ESP32 + Arduino) & Parcial \\ \hline
+Estrutura Física (EF) & Reserva de flutuabilidade $\ge 40\%$ (sem flutuadores de EVA) & Não atendido \\ \hline
+\end{tabularx}
+\end{table}
 
 
 % ============================================================
@@ -1087,13 +1156,17 @@ A Prova de Conceito será validada com sucesso ao cumprir os seguintes critério
 % ============================================================
 \section{Conclusão}
 
-O H-DROP avançou do modelo puramente conceitual para um protótipo físico funcional. A estrutura em PVC foi montada, os ensaios de flutuabilidade foram concluídos com sucesso, e os principais componentes, bateria com BMS, motores, ESCs e \textit{firmware} de telemetria, foram validados em bancada. O sistema de comunicação 4G/GNSS opera de forma estável, com a Estação de Controle recebendo telemetria em tempo real.
+O H-DROP percorreu, ao longo do semestre, a trajetória completa do modelo puramente conceitual (PC1) ao protótipo físico integrado e validado (PC4). Neste estágio final, todos os subsistemas foram reunidos em uma única plataforma funcional: a estrutura em PVC com a torre de comunicação montada, a propulsão diferencial com motores sincronizados, o barramento de alimentação LiFePO4 com BMS acoplado a todos os módulos de processamento (ESP32 e Arduino), o subsistema de geolocalização e comunicação 4G/GNSS validado em campo e o \textit{firmware} de controle e telemetria sobre FreeRTOS. A embarcação completa foi ensaiada em ambiente aquático.
 
-As principais conquistas do PC3 são: (1) validação hidrostática da plataforma física; (2) integração mecânica e elétrica dos motores e ESCs ao chassi; (3) validação do subsistema de energia com BMS ativo; e (4) consolidação do \textit{firmware} com FreeRTOS, PID embarcado e telemetria MQTT funcional.
+\textbf{Principais resultados e grau de atendimento dos objetivos:} foram plenamente atingidos os objetivos de plataforma flutuante estável, propulsão sincronizada, gerenciamento de energia protegido, geolocalização/comunicação móvel e telemetria com Estação de Controle. O objetivo de navegação autônoma ponto a ponto foi alcançado em ambiente de simulação de alta fidelidade e validado parcialmente em água, restando a calibração fina da malha de controle.
 
-As limitações ainda existentes dizem respeito à calibração do PID em ambiente aquático real, à execução da missão autônoma completa de ponto A a ponto B. A reserva de flutuabilidade ainda está abaixo da meta de projeto de 40\% sem os flutuadores de EVA.
+\textbf{Limitações finais:} a sintonização dos ganhos do controlador em malha fechada na água e a validação plena do anticolisão em movimento permanecem como frentes de refinamento; a reserva de flutuabilidade, sem os flutuadores de EVA, ainda está abaixo da meta de 40\%.
 
-Para o PC4, as ações previstas incluem: testes de malha fechada (PID) na água com calibração dos ganhos $K_p$, $K_i$ e $K_d$; execução da missão autônoma de navegação por \textit{waypoints}; validação do sistema anticolisão em movimento; coleta e análise dos dados de desempenho energético e de navegação; e elaboração do relatório final de validação.
+\textbf{Aprendizados técnicos:} a integração de cargas de alta corrente (motores/4G) com eletrônica sensível exigiu defesa em profundidade — separação de ramais, \textit{anti-spark}, diodos Schottky, \textit{shunt} externo e capacitores de amortecimento. A migração para um \textit{array} de sensores e a adoção de \textit{firmware} assíncrono sobre FreeRTOS mostraram-se decisivas para a robustez do sistema. O ambiente de simulação em três camadas permitiu amadurecer o algoritmo de navegação antes do contato com a água, reduzindo risco.
+
+\textbf{Trabalhos futuros:} calibração instrumentada do PID em água; instalação dos flutuadores de EVA; fusão inercial com MPU-6050 real; integração direta \textit{firmware}↔MQTT em campo; e compensação ativa da zona morta dos ESCs.
+
+\textbf{Avaliação crítica do processo:} o desenvolvimento incremental por pontos de controle, com validação independente de cada subsistema antes da integração total, mostrou-se eficaz para conter falhas sistêmicas. O principal gargalo foi a dependência da integração física completa para liberar os ensaios de controle em malha fechada, concentrados ao fim do cronograma — um aprendizado a antecipar em projetos futuros.
 
 % ============================================================
 \section{Cronograma de Desenvolvimento e Entregas}
@@ -1125,8 +1198,21 @@ Para o PC4, as ações previstas incluem: testes de malha fechada (PID) na água
 \printbibliography[title={Referências}]
 \nocite{*}
 
-\section{Link dos códigos do GIT HUB}
-https://github.com/AlphaCompLabs/H-Drop.git
+% ============================================================
+\section{Anexos}
+
+Os materiais complementares a seguir foram referenciados ao longo do relatório e são reunidos aqui para preservar a fluidez da leitura.
+
+\begin{itemize}
+\item \textbf{Imagens da montagem física:} comparativo CAD vs.\ construído (Figura~\ref{fig:evidencia_estrutura}), torre de comunicação montada (Figura~\ref{fig:torre_montada}), ensaio de flutuabilidade (Figura~\ref{fig:flutuabilidade}) e prototipagem eletrônica (Figura~\ref{fig:evidencia_eletronica}).
+\item \textbf{Capturas de esquemáticos e diagramas:} esquemático de navegação/telemetria (Figura~\ref{fig:esquematico_pc3}), diagrama de blocos da arquitetura (Figura~\ref{fig:diagrama_controle_detalhado}), arquitetura de controle cíclica (Figura~\ref{fig:arquitetura_controle_ciclica}), diagrama de alimentação (Figura~\ref{fig:diagrama_alimentacao}) e topologia do barramento de potência (Figuras~\ref{fig:topologia1} e~\ref{fig:topologia2}).
+\item \textbf{Capturas de comunicação e telemetria:} log de telemetria MQTT (Figura~\ref{fig:evidencia_firmware}), terminal GNSS em funcionamento (Figura~\ref{fig:terminal_gnss}) e Estação de Controle em Angular (Figura~\ref{fig:evidencia_software}).
+\item \textbf{Prints de simulação:} \textit{dashboard} de controle (Figura~\ref{fig:dashboard_geral}), mapa tático da rota A→B e log de eventos da FSM.
+\item \textbf{Registros de testes de sensores:} bancada do ultrassônico (Figura~\ref{fig:evidencia_sensores}) e módulos MPU/HX711/LED (Figuras~\ref{fig:sensores_laterais}--\ref{fig:led_mosfet}).
+\item \textbf{Tabelas de medições e parâmetros:} matriz de componentes (Tabela~\ref{tab:componentes_riscos}), requisitos técnicos (Tabela~\ref{tab:requisitos_tecnicos}), envelope de potência dos ESCs (Tabela~\ref{tab:envelope_pwm}) e grau de atendimento (Tabela~\ref{tab:atendimento}).
+\item \textbf{Vídeos de validação:} acionamento dos motores em bancada — \url{https://photos.app.goo.gl/3MceCbJM5Kov54rX7}.
+\item \textbf{Trechos de código e repositórios:} código-fonte completo do projeto em \url{https://github.com/AlphaCompLabs/H-Drop.git} — \textit{firmware} de motores em \texttt{/Motors-Simulation} e ambiente de simulação de controle em \texttt{/Controler-Simulation}.
+\end{itemize}
 
 % ============================================================
 % FIM DO DOCUMENTO

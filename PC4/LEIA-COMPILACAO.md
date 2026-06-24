@@ -47,10 +47,8 @@ Enquanto não forem adicionadas, aparecem como caixa **[IMAGEM AUSENTE]** no PDF
 | `topologia-conexoes-2.png` | Topologia do barramento de potência |
 | `topologia-escs.png` | Detalhe das conexões dos ESCs |
 | `tela-app.jpeg` | Interface web servida pela ESP32 |
-| `print-dashboard-completo.png` | Dashboard de simulação (visão geral) |
 | `print-rota-a-b.png` | Mapa tático rota A→B |
 | `print-painel-log.png` | Log de eventos da FSM |
-| `mpu.jpeg` | Montagem do módulo MPU |
 | `carga.jpeg` | Bancada HX711 + célula de carga |
 | `led.jpeg` | Fita LED / MOSFET |
 
